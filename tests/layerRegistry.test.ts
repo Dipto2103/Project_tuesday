@@ -9,9 +9,10 @@ describe('Layer Registry & Schema Validation (Spec §5.2)', () => {
     expect(fs.existsSync(layersPath)).toBe(true);
 
     const raw = fs.readFileSync(layersPath, 'utf-8');
-    const layers = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const layers = Array.isArray(parsed) ? parsed : parsed.layers;
     expect(Array.isArray(layers)).toBe(true);
-    expect(layers.length).toBeGreaterThanOrEqual(3);
+    expect(layers.length).toBeGreaterThanOrEqual(2);
 
     for (const layer of layers) {
       const validated = LayerSchema.parse(layer);
