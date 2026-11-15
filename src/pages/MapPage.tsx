@@ -165,9 +165,6 @@ export const MapPage: React.FC = () => {
             );
             if (found) setSelectedCheckpoint(found);
           }
-        } else if (data.length > 0) {
-          const jezero = data.find((c) => c.id.includes('jezero')) || data[0];
-          setSelectedCheckpoint(jezero);
         }
       })
       .catch((err) => console.warn('[MAP] Failed to load checkpoints:', err));
@@ -261,10 +258,9 @@ export const MapPage: React.FC = () => {
   };
 
   const handleResetView = () => {
-    const jezero = { latitude: 18.4447, longitude: 77.4508 };
-    mapRef.current?.flyTo(jezero.latitude, jezero.longitude, 7);
-    setSelectedCoord(jezero);
-    handleSelectCoordinate(jezero);
+    mapRef.current?.fitWorld();
+    setSelectedCoord(null);
+    setSelectedCheckpoint(null);
   };
 
   const handleLocatePrompt = () => {
@@ -294,13 +290,31 @@ export const MapPage: React.FC = () => {
       if (c.kind === 'science_site' && !activeLayers.poi) continue;
       if (c.kind === 'hazard' && !activeLayers.hazards) continue;
 
+      // Filter by active scientific resources when chips are selected
+      if (activeResources.length > 0) {
+        const hasMatchingResource = c.resources?.some((r) => {
+          const t = r.type.toLowerCase();
+          return activeResources.some((f) => {
+            if (f === 'water_ice') return t.includes('ice') || t.includes('water');
+            if (f === 'clay') return t.includes('clay') || t.includes('hydrated') || t.includes('smectite') || t.includes('kaolinite');
+            if (f === 'sulfate') return t.includes('sulfate') || t.includes('gypsum') || t.includes('jarosite');
+            if (f === 'iron_oxide') return t.includes('iron') || t.includes('hematite');
+            if (f === 'volcanic') return t.includes('volcanic') || t.includes('basalt') || t.includes('pyroxene') || t.includes('olivine');
+            if (f === 'carbonate') return t.includes('carbonate');
+            if (f === 'metal') return t.includes('metal') || t.includes('meteorite');
+            return t.includes(f);
+          });
+        });
+        if (!hasMatchingResource) continue;
+      }
+
       const isSelected =
         selectedCheckpoint?.id === c.id ||
         (selectedCoord &&
           Math.abs(c.lat - selectedCoord.latitude) < 0.05 &&
           Math.abs(c.lonE - normalizeLon360(selectedCoord.longitude)) < 0.05);
 
-      const color =
+      let color =
         c.kind === 'landing_site'
           ? '#56D9E8'
           : c.kind === 'hazard'
@@ -308,6 +322,17 @@ export const MapPage: React.FC = () => {
           : c.kind === 'science_site'
           ? '#A78BFA'
           : '#FF7043';
+
+      if (activeResources.length > 0 && c.resources?.length) {
+        const primaryRes = c.resources[0].type.toLowerCase();
+        if (primaryRes.includes('ice') || primaryRes.includes('water')) color = '#56D9E8';
+        else if (primaryRes.includes('clay') || primaryRes.includes('hydrated')) color = '#F5B544';
+        else if (primaryRes.includes('sulfate')) color = '#B392F0';
+        else if (primaryRes.includes('iron')) color = '#FF7043';
+        else if (primaryRes.includes('volcanic') || primaryRes.includes('basalt')) color = '#EF4444';
+        else if (primaryRes.includes('carbonate')) color = '#4ADE80';
+        else if (primaryRes.includes('metal')) color = '#A0A0A0';
+      }
 
       const iconChar =
         c.kind === 'landing_site'
@@ -371,7 +396,7 @@ export const MapPage: React.FC = () => {
     }
 
     return list;
-  }, [checkpoints, activeLayers, selectedCheckpoint, selectedCoord]);
+  }, [checkpoints, activeLayers, selectedCheckpoint, selectedCoord, activeResources]);
 
   // Convert route into segments (ok / steep / nodata)
   const routeSegments = useMemo(() => {
@@ -845,7 +870,7 @@ export const MapPage: React.FC = () => {
           layers={trekLayers}
           baseLayerId={activeBaseLayerId}
           markers={markers}
-          initial={{ lat: 18.4447, lonE: 77.4508, zoom: 6 }}
+          initial={{ lat: 0, lonE: 0, zoom: 1 }}
           onMapClick={handleMapClick}
           onCursorMove={handleCursorMove}
           onBackendDegraded={setIsDegraded}

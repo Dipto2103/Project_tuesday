@@ -19,6 +19,7 @@ vi.mock('leaflet', () => {
       latLngBounds: vi.fn().mockReturnValue({}),
       map: vi.fn().mockReturnValue({
         setView: vi.fn(),
+        fitBounds: vi.fn(),
         on: vi.fn(),
         off: vi.fn(),
         remove: vi.fn(),

@@ -75,13 +75,12 @@ export class MarsMap {
 
   constructor(private o: MarsMapOptions) {
     this.layers = new Map(o.layers.map((l) => [l.id, l]));
-    const init = o.initial ?? { lat: 0, lonE: 0, zoom: 2 };
 
     this.map = L.map(o.container, {
       crs: L.CRS.EPSG4326,
       minZoom: 1,
       maxZoom: 11,
-      zoomSnap: 0.5,
+      zoomSnap: 0.1,
       zoomDelta: 0.5,
       maxBounds: MARS_WORLD_BOUNDS,
       maxBoundsViscosity: 1.0,
@@ -91,7 +90,15 @@ export class MarsMap {
       preferCanvas: true
     });
 
-    this.map.setView([init.lat, lon360ToDisplay(init.lonE)], init.zoom, { animate: false });
+    const init = o.initial;
+    const hasSpecificTarget =
+      init && (Math.abs(init.lat) > 0.01 || Math.abs(init.lonE) > 0.01 || init.zoom > 2);
+
+    if (hasSpecificTarget && init) {
+      this.map.setView([init.lat, lon360ToDisplay(init.lonE)], init.zoom, { animate: false });
+    } else {
+      this.map.fitBounds(MARS_WORLD_BOUNDS, { animate: false, padding: [0, 0] });
+    }
 
     // Expose for debugging & Playwright assertions
     if (typeof window !== 'undefined') {
@@ -129,14 +136,20 @@ export class MarsMap {
     this.ro.observe(o.container);
   }
 
-  /** The world must always fill the container: no grey margins, no empty wrap area. */
+  /** The world must fill and fit the container cleanly: 90 by -90 North, 180 to -180 East. */
   private fitMinZoomToContainer() {
     if (!this.map) return;
-    const z = Math.max(1, this.map.getBoundsZoom(MARS_WORLD_BOUNDS, true));
+    const z = Math.max(1, this.map.getBoundsZoom(MARS_WORLD_BOUNDS, false));
     this.map.setMinZoom(z);
     if (this.map.getZoom() < z) {
       this.map.setZoom(z, { animate: false });
     }
+  }
+
+  fitWorld() {
+    this.programmatic++;
+    this.ignoreUntil = performance.now() + 1200;
+    this.map.fitBounds(MARS_WORLD_BOUNDS, { animate: false, padding: [0, 0] });
   }
 
   setBaseLayer(id: string) {

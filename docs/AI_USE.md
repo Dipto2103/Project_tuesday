@@ -317,6 +317,17 @@
   - Added "OPERATIONAL TERRAINS" quick-jump card in the left navigation panel for Gale Crater and Jezero Crater with "Offline Ready" indicators.
   - Added `gale-crater-offline` layer to `public/data/layers.json` and `src/map/layers.ts`.
 
+## Full-Page Map Alignment & Resource Filter Sync — 2026-11-15
+- **Planetary Alignment (90° by -90° N, 180° to -180° E):**
+  - Configured `MarsMap` to initialize by fitting world bounds (`MARS_WORLD_BOUNDS`: `[[-90, -180], [90, 180]]`) directly into the container on load so the full global Mars map fills the page.
+  - Adjusted `fitMinZoomToContainer()` to compute minZoom with `inside: false`, preventing awkward cropping of polar zones or longitude boundaries.
+  - Reduced `zoomSnap` to `0.1` for pixel-accurate bounds fitting.
+  - Updated `handleResetView` in `MapPage.tsx` to call `fitWorld()`, instantly re-aligning the full planetary extent.
+- **Resource Indicator Alignment:**
+  - Connected `activeResources` state in `MapPage.tsx` to marker memoization: selecting resource chips (water-ice, clays, sulfates, iron oxides, volcanic, carbonates, metals) filters and recolors checkpoints with corresponding mineralogical signatures.
+  - Verified geodetic alignment of all 42 checkpoints and rover traverses across the equirectangular projection.
+
+
 
 
 
