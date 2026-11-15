@@ -13,8 +13,11 @@ import {
   greatCircleArc,
   splitArcAtAntimeridian,
   crossTrackKm,
-  pointToSegmentDistanceKm
+  pointToSegmentDistanceKm,
+  getTileMatrixDimensions,
+  latLonToTile
 } from '../src/core/geo';
+import { trekDeepLink } from '../src/core/trekLink';
 
 describe('Planetary Geodesy (src/core/geo.ts)', () => {
   it('normalizes longitudes to 0°–360° correctly across wraps', () => {
@@ -154,6 +157,49 @@ describe('Planetary Geodesy (src/core/geo.ts)', () => {
       expect(Number.isFinite(pt.lat)).toBe(true);
       expect(Number.isFinite(pt.lonE)).toBe(true);
     });
+  });
+
+  // Acceptance Tests §10 Automated 1 & 2
+  it('satisfies spec §10 automated 1 benchmarks', () => {
+    expect(lon360ToDisplay(226.2)).toBeCloseTo(-133.8, 4);
+    expect(normalizeLon360(-10)).toBe(350);
+    // ¼ of 2π·3389.5 km = 5324.23 km ≈ 5324.4
+    expect(haversineKm(0, 0, 0, 90)).toBeCloseTo(5324.4, 0);
+  });
+
+  it('satisfies spec §10 automated 2 tile math (matrix 0 -> 2 cols x 1 row, matrix m -> 2^(m+1) x 2^m)', () => {
+    // Matrix 0: 2 cols x 1 row
+    const m0 = getTileMatrixDimensions(0);
+    expect(m0.cols).toBe(2);
+    expect(m0.rows).toBe(1);
+
+    // Matrix 1: 4 cols x 2 rows
+    const m1 = getTileMatrixDimensions(1);
+    expect(m1.cols).toBe(4);
+    expect(m1.rows).toBe(2);
+
+    // Arbitrary matrix m: 2^(m+1) x 2^m
+    for (let m = 0; m <= 8; m++) {
+      const dim = getTileMatrixDimensions(m);
+      expect(dim.cols).toBe(Math.pow(2, m + 1));
+      expect(dim.rows).toBe(Math.pow(2, m));
+    }
+
+    // Tile coordinate calculation test
+    // Point at equator, lon 0: display lon 0. At matrix 0 (deg = 180): col = floor((0 + 180) / 180) = 1, row = floor((90 - 0) / 180) = 0
+    const tile0 = latLonToTile(0, 0, 0);
+    expect(tile0.col).toBe(1);
+    expect(tile0.row).toBe(0);
+  });
+
+  it('generates valid Mars Trek deep links (§1)', () => {
+    const link = trekDeepLink(-6.54347, 137.18169, 9);
+    expect(link).toContain('https://trek.nasa.gov/mars/#v=0.1');
+    expect(link).toContain('x=137.18169');
+    expect(link).toContain('y=-6.54347');
+    expect(link).toContain('z=9');
+    expect(link).toContain('p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905');
+    expect(link).toContain('b=mars');
   });
 });
 

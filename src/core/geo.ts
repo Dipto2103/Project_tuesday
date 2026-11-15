@@ -386,3 +386,31 @@ export function formatPlanetocentric(
   return `${latStr}, ${lonStr}`;
 }
 
+/**
+ * Tile matrix dimensions in NASA Mars Trek equirectangular WMTS.
+ * Matrix 0 has 2 columns × 1 row (each 256px tile spans 180°).
+ * Matrix m has 2^(m+1) columns × 2^m rows.
+ */
+export const getTileMatrixDimensions = (matrix: number): { cols: number; rows: number } => {
+  const m = Math.max(0, Math.floor(matrix));
+  return {
+    cols: Math.pow(2, m + 1),
+    rows: Math.pow(2, m)
+  };
+};
+
+/**
+ * Calculates tile col and row for a given lat and lon (in either 0..360E or -180..180 display) at TileMatrix m.
+ * Row 0 is the north edge, matching Leaflet y-down scheme.
+ */
+export const latLonToTile = (lat: number, lon: number, matrix: number): { col: number; row: number } => {
+  const m = Math.max(0, Math.floor(matrix));
+  const displayLon = lon > 180 ? lon - 360 : lon;
+  const deg = 180 / Math.pow(2, m);
+  return {
+    col: Math.floor((displayLon + 180) / deg),
+    row: Math.floor((90 - clampLat(lat)) / deg)
+  };
+};
+
+
