@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { PNG } from 'pngjs';
 
-const BG = [0x0B, 0x0D, 0x10];
+const BG = [0xFF, 0x00, 0xFF];
 const near = (r: number, g: number, b: number, c: number[]) =>
   Math.abs(r - c[0]) + Math.abs(g - c[1]) + Math.abs(b - c[2]) < 24;
 
@@ -15,7 +15,7 @@ for (const vp of [
     await page.goto('/#/map');
     await page.addStyleTag({
       content:
-        '.leaflet-marker-pane,.leaflet-control-container,.ml-overlay{visibility:hidden!important}'
+        '.leaflet-container{background:#ff00ff!important}.leaflet-marker-pane,.leaflet-control-container,.ml-overlay{visibility:hidden!important}'
     });
     await page.waitForFunction(
       () => document.querySelectorAll('.leaflet-tile-loading').length === 0,
