@@ -53,6 +53,7 @@ const GALE_TREK_BYPASS_URL =
 
 export const MapPage: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const isCalibrateMode = searchParams.get('calibrate') === '1';
   const navigate = useNavigate();
   const mapRef = useRef<MarsMap | null>(null);
 
@@ -875,6 +876,36 @@ export const MapPage: React.FC = () => {
           </div>
         )}
 
+        {isCalibrateMode && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 p-3 rounded-xl bg-[#101114]/95 border border-[#56D9E8]/80 text-[#E7E1D8] font-mono text-xs shadow-2xl backdrop-blur-md flex flex-col gap-1 min-w-[320px]">
+            <div className="flex items-center justify-between border-b border-[rgba(231,225,216,0.15)] pb-1 mb-1">
+              <span className="font-bold text-[#56D9E8] flex items-center gap-1.5">
+                <Crosshair className="w-4 h-4" /> CALIBRATION OVERLAY (?calibrate=1)
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#56D9E8]/20 text-[#56D9E8]">ACTIVE</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#A0A0A0]">Current Zoom:</span>
+              <span className="text-white font-bold">{mapRef.current?.getZoom().toFixed(2) ?? '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#A0A0A0]">World Px Width:</span>
+              <span className="text-white">
+                {mapRef.current ? Math.round(512 * Math.pow(2, mapRef.current.getZoom())) : '—'} px
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#A0A0A0]">Formula 512·2^zoom:</span>
+              <span className="text-[#56D9E8]">
+                {mapRef.current ? (512 * Math.pow(2, mapRef.current.getZoom())).toFixed(1) : '—'} px
+              </span>
+            </div>
+            <div className="text-[10px] text-[#A0A0A0] mt-1 pt-1 border-t border-[rgba(231,225,216,0.10)]">
+              4 corners at (±90°, ±180°) & 5 NASA ground truth landmarks displayed
+            </div>
+          </div>
+        )}
+
         <MarsMapView
           layers={trekLayers}
           baseLayerId={activeBaseLayerId}
@@ -885,6 +916,7 @@ export const MapPage: React.FC = () => {
           onBackendDegraded={setIsDegraded}
           routeSegments={routeSegments}
           showGraticule={showGraticule}
+          calibrate={isCalibrateMode}
           mapInstanceRef={mapRef}
         />
 

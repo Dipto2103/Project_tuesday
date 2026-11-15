@@ -95,4 +95,9 @@ describe('Checkpoint Catalog & Scientific Guardrails (Spec §6.1, §6.2, §17)',
       expect(iceRes?.provenance).toBe('NASA-DERIVED');
     }
   });
+
+  it('satisfies MAP FIX #2 §5.3 validateCheckpoints geodetic criteria', async () => {
+    const { validateCheckpoints } = await import('../scripts/validate-checkpoints');
+    expect(validateCheckpoints(catalogPath)).toBe(true);
+  });
 });

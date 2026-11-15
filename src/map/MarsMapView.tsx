@@ -26,6 +26,7 @@ export interface MarsMapViewProps {
   onBackendDegraded?: (degraded: boolean) => void;
   routeSegments?: { points: [number, number][]; flag: 'ok' | 'steep' | 'nodata' }[];
   showGraticule?: boolean;
+  calibrate?: boolean;
   mapInstanceRef?: React.MutableRefObject<MarsMap | null>;
 }
 
@@ -40,6 +41,7 @@ export const MarsMapView: React.FC<MarsMapViewProps> = ({
   onBackendDegraded,
   routeSegments,
   showGraticule = true,
+  calibrate = false,
   mapInstanceRef
 }) => {
   const host = useRef<HTMLDivElement>(null);
@@ -73,7 +75,8 @@ export const MarsMapView: React.FC<MarsMapViewProps> = ({
       onViewport: (v) => vpRef.current?.(v),
       onCursorMove: (c) => cursorRef.current?.(c),
       onBackendDegraded: (d) => degradedRef.current?.(d),
-      showGraticule
+      showGraticule,
+      calibrate
     });
 
     map.current = m;
@@ -108,6 +111,10 @@ export const MarsMapView: React.FC<MarsMapViewProps> = ({
   useEffect(() => {
     map.current?.setGraticuleVisible(showGraticule);
   }, [showGraticule]);
+
+  useEffect(() => {
+    map.current?.setCalibrate(!!calibrate);
+  }, [calibrate]);
 
   return (
     <div

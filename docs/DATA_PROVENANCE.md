@@ -91,4 +91,20 @@ Every numerical metric, cartographic layer, and resource claim in MARS LANTERN c
 - **Projection:** Web Mercator (`EPSG:3857`) tiled pyramid.
 - **Decision:** MARS LANTERN strictly standardizes on Equirectangular (`EPSG:4326`) for all 2D planetary mapping matching NASA Trek WMTS capabilities. Mixing Web Mercator into an `EPSG:4326` Leaflet CRS causes non-linear latitude stretching and marker drift. Therefore, OpenPlanetary Web Mercator tiles are excluded from the 2D base layer list and reserved as a texture option in the 3D globe / terrain viewer.
 
+---
+
+## 6. Geodetic Ground Truth Calibration Landmarks (Spec §5.1, MAP FIX #2)
+
+Verified reference landmarks rendered in calibration mode (`?calibrate=1`) to confirm Leaflet equirectangular CRS registration against NASA orbital imagery:
+
+| Landmark | Planetocentric Latitude | Planetocentric East Longitude | Equirectangular Display Longitude | Provenance & Source Authority |
+|---|---|---|---|---|
+| **Olympus Mons Summit** | 18.65°N | 226.20°E | -133.80° | NASA/USGS Gazetteer of Planetary Nomenclature, IAU/WGPSN datum anchor. |
+| **Jezero Crater (Octavia E. Butler Landing)** | 18.4447°N | 77.4508°E | +77.4508° | NASA Mars 2020 Mission / JPL Perseverance official landing site log. |
+| **Bradbury Landing (MSL Curiosity)** | 4.5895°S (-4.59°) | 137.4417°E | +137.4417° | NASA JPL MSL Science Operations, PDS PLACES Ground Data System. |
+| **Hellas Planitia Basin Centre** | 42.40°S (-42.40°) | 70.00°E | +70.00° | USGS Astrogeology Science Center / MOLA Topographic Atlas. |
+| **Gale Crater Overview Anchor** | 6.5435°S (-6.5435°) | 137.1817°E | +137.1817° | NASA Mars Trek Portal deep link (`trek.nasa.gov/mars/#v=0.1...`). |
+| **Global Quadrant Corners (4x)** | ±90.00° | 180.00° / -180.00° | ±180.00° | Analytical equirectangular bounds `WORLD = [[-90, -180], [90, 180]]`. |
+
+
 

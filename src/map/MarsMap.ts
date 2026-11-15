@@ -59,6 +59,7 @@ export interface MarsMapOptions {
   onCursorMove?: (p: { lat: number; lonE: number; displayLon: number }) => void;
   onBackendDegraded?: (degraded: boolean) => void;
   showGraticule?: boolean;
+  calibrate?: boolean;
 }
 
 export class MarsMap {
@@ -69,6 +70,7 @@ export class MarsMap {
   private markers = new Map<string, L.Marker>();
   private routeLayer = L.layerGroup();
   private graticuleLayer = L.layerGroup();
+  private calibrationLayer = L.layerGroup();
   private fallback?: L.ImageOverlay;
   private programmatic = 0;
   private ignoreUntil = 0;
@@ -122,12 +124,17 @@ export class MarsMap {
     this.graticuleLayer.addTo(this.map);
     this.markerGroup.addTo(this.map);
     this.routeLayer.addTo(this.map);
+    this.calibrationLayer.addTo(this.map);
 
     // Planetary scale control
     new (MarsScale as any)().addTo(this.map);
 
     if (o.showGraticule !== false) {
       this.initGraticule();
+    }
+
+    if (o.calibrate) {
+      this.initCalibration();
     }
 
     this.setBaseLayer(o.baseLayerId);
@@ -368,6 +375,70 @@ export class MarsMap {
     } else {
       if (this.map.hasLayer(this.graticuleLayer)) {
         this.map.removeLayer(this.graticuleLayer);
+      }
+    }
+  }
+
+  private initCalibration() {
+    this.calibrationLayer.clearLayers();
+
+    const crosshairIcon = (label: string, color = '#FF5252') =>
+      L.divIcon({
+        className: 'ml-calibration-pin',
+        html: `
+          <div style="position:relative; width:0px; height:0px; font-family:monospace; font-size:10px; color:${color}; white-space:nowrap; pointer-events:none;">
+            <svg width="24" height="24" viewBox="-12 -12 24 24" style="position:absolute; left:-12px; top:-12px;">
+              <circle r="6" fill="none" stroke="${color}" stroke-width="1.5"/>
+              <line x1="-10" y1="0" x2="10" y2="0" stroke="${color}" stroke-width="1.5"/>
+              <line x1="0" y1="-10" x2="0" y2="10" stroke="${color}" stroke-width="1.5"/>
+            </svg>
+            <span style="position:absolute; left:14px; top:-6px; background:rgba(0,0,0,0.85); padding:1px 4px; border-radius:2px; border:1px solid ${color};">
+              ${label}
+            </span>
+          </div>
+        `,
+        iconSize: [0, 0]
+      });
+
+    // 4 Corner crosshairs at (+-90, +-180)
+    const corners: [number, number, string][] = [
+      [90, -180, 'Corner NW (+90°, -180°)'],
+      [90, 180, 'Corner NE (+90°, +180°)'],
+      [-90, -180, 'Corner SW (-90°, -180°)'],
+      [-90, 180, 'Corner SE (-90°, +180°)']
+    ];
+    for (const [lat, lon, label] of corners) {
+      L.marker([lat, lon], { icon: crosshairIcon(label, '#56D9E8'), interactive: false }).addTo(
+        this.calibrationLayer
+      );
+    }
+
+    // Landmark crosshairs
+    const landmarks: [number, number, string][] = [
+      [18.65, 226.2, 'Olympus Mons summit (18.65°N, 226.2°E)'],
+      [18.44, 77.45, 'Jezero Crater (18.44°N, 77.45°E)'],
+      [-4.59, 137.44, 'Bradbury Landing (4.59°S, 137.44°E)'],
+      [-42.4, 70.0, 'Hellas Planitia centre (42.4°S, 70.0°E)'],
+      [-6.5435, 137.1817, 'Gale-view centre (6.5435°S, 137.1817°E)']
+    ];
+    for (const [lat, lonE, label] of landmarks) {
+      L.marker([lat, lon360ToDisplay(lonE)], {
+        icon: crosshairIcon(label, '#FFB070'),
+        interactive: false
+      }).addTo(this.calibrationLayer);
+    }
+  }
+
+  setCalibrate(enable: boolean) {
+    if (enable) {
+      this.initCalibration();
+      if (!this.map.hasLayer(this.calibrationLayer)) {
+        this.calibrationLayer.addTo(this.map);
+      }
+    } else {
+      this.calibrationLayer.clearLayers();
+      if (this.map.hasLayer(this.calibrationLayer)) {
+        this.map.removeLayer(this.calibrationLayer);
       }
     }
   }
