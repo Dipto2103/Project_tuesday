@@ -282,10 +282,27 @@
 
 ---
 
-## Verification Status
-- **Test Suite:** 21 vitest test suites, 122 passing unit tests (`npm test`).
-- **Production Build:** Clean TypeScript compilation and Vite minification with zero errors (`npm run build`).
-- **Runtime Verification:** Local static preview served cleanly on port 4173 with complete route lazy loading.
+## Map Fix Implementation (M0–M7) — 2026-11-15
+- **M0 Root-Cause Analysis (`docs/MAP_LOOP_ROOT_CAUSE.md`):**
+  - Documented Cause A (equirectangular tile matrix alignment missing `zoomOffset: -1` and `minZoom: 1`; missing `fitMinZoomToContainer`) and Cause B (telemetry loop and programmatic `flyTo` re-triggering `moveend`).
+- **M1 Geodesy & Tile Math (`src/core/geo.ts`, `src/core/trekLink.ts`, `tests/geo.test.ts`):**
+  - Added `getTileMatrixDimensions` (matrix 0 has 2 cols × 1 row; matrix $m$ has $2^{m+1} \times 2^m$).
+  - Added `latLonToTile` mapping for equirectangular tile addresses.
+  - Implemented `trekDeepLink` builder (§1) linking directly to NASA Mars Trek views.
+- **M2 Layer Registry Probe (`scripts/probe-trek.ts`, `public/data/layers.json`):**
+  - Probed live NASA Mars Trek WMTS tile endpoints.
+  - Verified `Mars_Viking_MDIM21_ClrMosaic_global_232m.jpg` at `maxMatrix: 7` and `Mars_MGS_MOLA_ClrShade_merge_global_463m.jpg` at `maxMatrix: 7`. Committed verified layers to `public/data/layers.json`.
+- **M3–M6 Planetary Map Engine (`src/map/MarsMap.ts`, `src/map/MarsMapView.tsx`, `src/map/MarsScale.ts`, `src/pages/MapPage.tsx`):**
+  - Replaced legacy React-Leaflet component with imperative Leaflet wrapper `MarsMap` (CRS `L.CRS.EPSG4326`, `noWrap: true`, `maxBounds: [[-90, -180], [90, 180]]`, `maxBoundsViscosity: 1.0`, `zoomOffset: -1`, `minZoom: 1`).
+  - Implemented Mars-radius scale bar `MarsScale.ts` ($R = 3389.5\text{ km}$) using `haversineKm`.
+  - Added fallback basemap auto-recovery (`handleTileError`) with degraded warning banner (`isDegraded`).
+  - Migrated checkpoints from `checkpoints.json`, hazards from `HAZARDS_CATALOG`, and traverses from `ALL_ROVER_TRAVERSES`.
+  - Added 30° graticule, Open-in-Trek toolbar & drawer buttons, and throttled cursor telemetry (`lat`, `lonE`, `displayLon`, elevation with `NASA-DERIVED` badge, and slope).
+  - Wired segmented polyline route renderer with `ok`, `steep` ($> 15^\circ$), and `nodata` risk flags.
+- **M7 Smoke & Calibration Suite (`tests/mapSmokeAndCalibration.test.ts`):**
+  - Added unit and geodetic calibration acceptance tests matching §10 manual calibration table.
+  - Test suite passes 100% (25 test files, 148 tests passing). Production build succeeds with 0 errors.
+
 
 
 
