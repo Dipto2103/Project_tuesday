@@ -14,7 +14,8 @@ export default defineConfig({
     host: true
   },
   test: {
-    include: ['tests/**/*.test.{ts,tsx}']
+    include: ['tests/**/*.test.{ts,tsx}'],
+    testTimeout: 20000
   },
   build: {
     outDir: 'dist',

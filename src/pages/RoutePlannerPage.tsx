@@ -329,7 +329,7 @@ export const RoutePlannerPage: React.FC = () => {
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Left Side: Parameters & Results Panel (440px) */}
-        <aside className="w-full lg:w-[440px] bg-[#101114]/98 backdrop-blur-2xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-4 flex flex-col justify-between shrink-0 overflow-y-auto z-20">
+        <aside className="w-full lg:w-[440px] bg-[#101114]/98 backdrop-blur-2xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-4 flex flex-col shrink-0 min-h-0 overflow-y-auto z-20">
           <div className="space-y-4">
             {/* Mode Selector */}
             <div>

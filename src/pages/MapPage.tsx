@@ -516,7 +516,7 @@ export const MapPage: React.FC = () => {
           isLeftPanelOpen ? 'translate-x-0' : '-translate-x-full lg:-translate-x-full'
         }`}
       >
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
           {/* Panel Header */}
           <div className="flex items-center justify-between border-b border-[rgba(231,225,216,0.08)] pb-3">
             <div className="flex items-center gap-2">

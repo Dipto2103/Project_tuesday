@@ -126,7 +126,7 @@ export const CompareRoutesPage: React.FC = () => {
 
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Left Comparison Panel (480px) */}
-        <aside className="w-full lg:w-[480px] bg-[#101114]/98 backdrop-blur-2xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-5 flex flex-col justify-between shrink-0 overflow-y-auto z-20">
+        <aside className="w-full lg:w-[480px] bg-[#101114]/98 backdrop-blur-2xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-5 flex flex-col shrink-0 min-h-0 overflow-y-auto z-20">
           <div className="space-y-5">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -275,7 +275,7 @@ export const CompareRoutesPage: React.FC = () => {
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-[rgba(231,225,216,0.10)] flex items-center gap-2">
+          <div className="pt-4 mt-4 shrink-0 border-t border-[rgba(231,225,216,0.10)] flex items-center gap-2">
             <Button
               variant="secondary"
               size="md"

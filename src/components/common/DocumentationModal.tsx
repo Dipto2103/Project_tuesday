@@ -83,7 +83,7 @@ export const DocumentationModal: React.FC<DocumentationModalProps> = ({ isOpen, 
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs leading-relaxed font-sans">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-5 text-xs leading-relaxed font-sans">
           {activeTab === 'overview' && (
             <div className="space-y-4">
               <h3 className="font-mono text-sm font-bold text-mars-orange">

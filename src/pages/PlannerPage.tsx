@@ -191,7 +191,7 @@ export const PlannerPage: React.FC = () => {
       {/* Main 3-Column Layout: Left Steps (320px) + Center Map + Right Overview (320px) */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Left Column (320px): Steps & Configuration */}
-        <aside className="w-full lg:w-80 bg-[#101114]/95 backdrop-blur-xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-4 flex flex-col justify-between shrink-0 overflow-y-auto">
+        <aside className="w-full lg:w-80 bg-[#101114]/95 backdrop-blur-xl border-b lg:border-b-0 lg:border-r border-[rgba(231,225,216,0.12)] p-4 flex flex-col shrink-0 min-h-0 overflow-y-auto">
           <div className="space-y-5">
             <div>
               <span className="text-[10px] font-mono font-bold tracking-widest text-[#FF7043] uppercase block mb-1">
@@ -347,7 +347,7 @@ export const PlannerPage: React.FC = () => {
         </main>
 
         {/* Right Column (320px): MISSION OVERVIEW Panel */}
-        <aside className="w-full lg:w-80 bg-[#101114]/95 backdrop-blur-xl border-t lg:border-t-0 lg:border-l border-[rgba(231,225,216,0.12)] p-4 flex flex-col justify-between shrink-0 overflow-y-auto">
+        <aside className="w-full lg:w-80 bg-[#101114]/95 backdrop-blur-xl border-t lg:border-t-0 lg:border-l border-[rgba(231,225,216,0.12)] p-4 flex flex-col shrink-0 min-h-0 overflow-y-auto">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-[rgba(231,225,216,0.08)] pb-3">
               <span className="font-display font-bold text-sm uppercase text-white">
@@ -432,7 +432,7 @@ export const PlannerPage: React.FC = () => {
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-[rgba(231,225,216,0.10)] space-y-2">
+          <div className="pt-4 mt-4 shrink-0 border-t border-[rgba(231,225,216,0.10)] space-y-2">
             <Button
               variant="primary"
               size="md"

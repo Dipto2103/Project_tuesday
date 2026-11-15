@@ -19,7 +19,7 @@ export const SkyPage: React.FC = () => {
         <ProvenanceBadge type="NASA-DERIVED" source="Allison & McEwen (2000) GISS" showIcon={false} />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-[1440px] mx-auto w-full">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 max-w-[1440px] mx-auto w-full">
         <SkyPanel
           observerLat={observerLat}
           observerLonE={observerLonE}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { TopBar } from '../nav/TopBar';
 import { SideRail } from '../nav/SideRail';
@@ -10,9 +10,17 @@ import type { Checkpoint } from '../../core/types';
 export const AppShell: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const mainRef = useRef<HTMLElement>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDocsOpen, setIsDocsOpen] = useState(false);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+
+  // Auto-scroll main window container to top on route change
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
+    }
+  }, [location.pathname]);
 
   // Fetch checkpoints once for geocoding & search
   useEffect(() => {
@@ -66,9 +74,12 @@ export const AppShell: React.FC = () => {
         <SideRail />
 
         <main
+          ref={mainRef}
           id="main-content"
           tabIndex={-1}
-          className="flex-1 min-h-0 relative h-full overflow-hidden flex flex-col focus:outline-none"
+          className={`flex-1 min-h-0 relative h-full flex flex-col focus:outline-none ${
+            location.pathname === '/map' ? 'overflow-hidden' : 'overflow-x-hidden overflow-y-auto'
+          }`}
         >
           <Outlet context={{ checkpoints }} />
         </main>
