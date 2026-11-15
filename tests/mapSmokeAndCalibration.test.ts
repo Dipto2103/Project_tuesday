@@ -26,7 +26,13 @@ vi.mock('leaflet', () => {
         setMinZoom: vi.fn(),
         getZoom: vi.fn().mockReturnValue(2),
         getBoundsZoom: vi.fn().mockReturnValue(1),
-        invalidateSize: vi.fn()
+        invalidateSize: vi.fn(),
+        createPane: vi.fn().mockReturnValue({ style: {} }),
+        getPane: vi.fn().mockReturnValue({ style: {} }),
+        getSize: vi.fn().mockReturnValue({ x: 1024, y: 512 }),
+        setMaxBounds: vi.fn(),
+        getMinZoom: vi.fn().mockReturnValue(1),
+        setZoom: vi.fn()
       }),
       tileLayer: vi.fn().mockReturnValue(dummyLayer),
       layerGroup: vi.fn().mockReturnValue(dummyLayer),
@@ -127,13 +133,13 @@ describe('Map Smoke & Geodetic Calibration Gate (§10)', () => {
       expect(lon360ToDisplay(180.1)).toBeCloseTo(-179.9, 4);
     });
 
-    it('#6: Tile zoom offset and matrix alignment (Leaflet zoom z -> Trek matrix z - 1)', () => {
-      // Leaflet zoom 1 -> Trek matrix 0 (2 cols x 1 row)
+    it('#6: Tile zoom offset and matrix alignment (Leaflet zoom z == Trek matrix z, zoomOffset: 0)', () => {
+      // Leaflet zoom 0 == Trek matrix 0 (2 cols x 1 row)
       const m0 = getTileMatrixDimensions(0);
       expect(m0.cols).toBe(2);
       expect(m0.rows).toBe(1);
 
-      // At zoom 1, each 256px tile spans 180 degrees
+      // At matrix 0, each 256px tile spans 180 degrees
       // Full world width (360 deg) = 2 tiles = 512 px
       const tileWest = latLonToTile(0, -90, 0);
       const tileEast = latLonToTile(0, 90, 0);

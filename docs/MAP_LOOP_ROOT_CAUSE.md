@@ -84,3 +84,38 @@ src/pages/MapPage.tsx(94,29): error TS2304: Cannot find name 'PlannedRoute'.
 ## How it was verified (commands + output)
 - Baseline test suite: `npm test` -> 24 passed, 136 tests passed.
 - Initial build verification: `npm run build` captured compile failure in `MapPage.tsx`.
+
+---
+
+## Quarter-map bug (Root Cause Confirmation — 2026-11-15)
+
+### 1. Symptom
+Mars imagery appears only in the top-left quarter of the map (spanning exactly 50% width and 50% height of the full world frame). The rest of the map area is blank/blue. Meanwhile, checkpoint markers and rover tracks are placed over the whole frame correctly (e.g., Jezero at ~77.45°E sits at pixel x ≈ 1188, y ≈ 335 in the full 1097×547 frame, but the squeezed Mars image only spans x ≈ 403..951, y ≈ 118..391).
+
+### 2. Network-Tab & Mathematical Verification (§2)
+- Leaflet's `L.CRS.EPSG4326` transformation is:
+  `x' = scale · (lon / 180 + 1)`
+  `y' = scale · (0.5 - lat / 180)`
+  where `scale = 256 · 2^z`.
+  At zoom $z$, world dimensions are:
+  - Width: $512 \cdot 2^z\text{ px}$ ($2^{z+1}$ tiles of 256 px)
+  - Height: $256 \cdot 2^z\text{ px}$ ($2^z$ tiles of 256 px)
+- At zoom $z = 0$, the Leaflet grid is $2\text{ columns} \times 1\text{ row}$.
+- NASA Mars Trek WMTS `TileMatrix 0` (`default028mm`) also has `MatrixWidth = 2.0` ($2\text{ columns}$) and `MatrixHeight = 1.0` ($1\text{ row}$).
+- **The Bug:** `zoomOffset: -1` was mistakenly applied in `MarsMap.ts`.
+  When the map rendered at zoom $z = 1$ (4 columns × 2 rows = 8 tiles covering $1024 \times 512\text{ px}$):
+  Leaflet evaluated `{z}` in the URL template as $z + \text{zoomOffset} = 1 + (-1) = 0$.
+  Leaflet therefore requested TileMatrix 0 tiles at $(x, y) \in [0..3] \times [0..1]$:
+  - `/0/0/0.jpg` -> 200 OK (drawn in slot x=0, y=0)
+  - `/0/0/1.jpg` -> 200 OK (drawn in slot x=1, y=0)
+  - `/0/0/2.jpg`, `/0/0/3.jpg`, `/0/1/0.jpg`, `/0/1/1.jpg`, `/0/1/2.jpg`, `/0/1/3.jpg` -> 404 (non-existent in TileMatrix 0).
+- Slots $(0, 0)$ and $(1, 0)$ cover $512 \times 256\text{ px}$ out of the $1024 \times 512\text{ px}$ frame—exactly the top-left quarter.
+- The remaining 6 tile slots failed, leaving the container background visible, while markers correctly mapped to the $1024 \times 512\text{ px}$ coordinate space.
+
+### 3. Required Correction
+1. Set `zoomOffset: 0` (Leaflet zoom $z \equiv$ Trek TileMatrix $z$).
+2. Set `minNativeZoom: 0` and `maxNativeZoom: def.maxMatrix` (not `maxMatrix + 1`).
+3. Add permanent fallback underlay pane (`basefallback`, zIndex 150) with `public/tiles/fallback-global.jpg` over `WORLD = [[-90, -180], [90, 180]]`.
+4. Neutral dark background `.leaflet-container { background: #0B0D10 }`.
+5. Exact container fit formula: `minZoom = Math.max(0, Math.log2(Math.max(w / 512, h / 256)))`.
+

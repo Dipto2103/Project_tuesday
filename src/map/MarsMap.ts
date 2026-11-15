@@ -13,7 +13,12 @@ import L from 'leaflet';
 import { lon360ToDisplay, displayToLon360, clampLat } from '../core/geo';
 import { MarsScale } from './MarsScale';
 
-export const MARS_WORLD_BOUNDS = L.latLngBounds([-90, -180], [90, 180]);
+export const WORLD = L.latLngBounds([-90, -180], [90, 180]); // the ONLY bounds literal
+export const MARS_WORLD_BOUNDS = WORLD;
+export const TILE = 256; // must equal TileWidth in GetCapabilities
+export const worldPxW = (z: number) => 2 * TILE * 2 ** z; // EPSG:4326: 2^(z+1) tiles wide
+export const worldPxH = (z: number) => TILE * 2 ** z; // 2^z tiles tall
+
 const TRANSPARENT_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
@@ -78,11 +83,11 @@ export class MarsMap {
 
     this.map = L.map(o.container, {
       crs: L.CRS.EPSG4326,
-      minZoom: 1,
+      minZoom: 0, // refined by fitMinZoomToContainer()
       maxZoom: 11,
-      zoomSnap: 0.1,
+      zoomSnap: 0.5,
       zoomDelta: 0.5,
-      maxBounds: MARS_WORLD_BOUNDS,
+      maxBounds: WORLD,
       maxBoundsViscosity: 1.0,
       worldCopyJump: false,
       zoomControl: false,
@@ -90,19 +95,28 @@ export class MarsMap {
       preferCanvas: true
     });
 
+    this.map.createPane('basefallback');
+    const fallbackPane = this.map.getPane('basefallback');
+    if (fallbackPane) fallbackPane.style.zIndex = '150'; // below tilePane (200)
+
+    this.installFallbackUnderlay();
+    this.fitMinZoomToContainer(); // BEFORE the first setView
+
     const init = o.initial;
     const hasSpecificTarget =
       init && (Math.abs(init.lat) > 0.01 || Math.abs(init.lonE) > 0.01 || init.zoom > 2);
+    const startZ = Math.max(init?.zoom ?? 0, this.map.getMinZoom());
 
     if (hasSpecificTarget && init) {
-      this.map.setView([init.lat, lon360ToDisplay(init.lonE)], init.zoom, { animate: false });
+      this.map.setView([init.lat, lon360ToDisplay(init.lonE)], startZ, { animate: false });
     } else {
-      this.map.fitBounds(MARS_WORLD_BOUNDS, { animate: false, padding: [0, 0] });
+      this.map.setView([0, 0], this.map.getMinZoom(), { animate: false });
     }
 
     // Expose for debugging & Playwright assertions
     if (typeof window !== 'undefined') {
       (window as any).__marsMap = this.map;
+      (window as any).__map = this.map;
     }
 
     this.graticuleLayer.addTo(this.map);
@@ -117,7 +131,6 @@ export class MarsMap {
     }
 
     this.setBaseLayer(o.baseLayerId);
-    this.fitMinZoomToContainer();
 
     this.map.on('click', (e: L.LeafletMouseEvent) =>
       this.o.onMapClick?.({
@@ -136,20 +149,36 @@ export class MarsMap {
     this.ro.observe(o.container);
   }
 
-  /** The world must fill and fit the container cleanly: 90 by -90 North, 180 to -180 East. */
+  /** The world must fill and fit the container cleanly without margins (cover formula). */
   private fitMinZoomToContainer() {
     if (!this.map) return;
-    const z = Math.max(1, this.map.getBoundsZoom(MARS_WORLD_BOUNDS, false));
+    const { x: w, y: h } = this.map.getSize();
+    if (!w || !h) return; // container not laid out yet; ResizeObserver will call again
+    const z = Math.max(0, Math.log2(Math.max(w / (2 * TILE), h / TILE)));
     this.map.setMinZoom(z);
     if (this.map.getZoom() < z) {
       this.map.setZoom(z, { animate: false });
     }
+    this.map.setMaxBounds(WORLD);
+  }
+
+  resetView() {
+    this.map.setView([0, 0], this.map.getMinZoom(), { animate: false });
   }
 
   fitWorld() {
     this.programmatic++;
     this.ignoreUntil = performance.now() + 1200;
-    this.map.fitBounds(MARS_WORLD_BOUNDS, { animate: false, padding: [0, 0] });
+    this.resetView();
+  }
+
+  private installFallbackUnderlay() {
+    const url = this.o.fallbackImageUrl ?? `${import.meta.env.BASE_URL}tiles/fallback-global.jpg`;
+    this.fallback = L.imageOverlay(url, WORLD, {
+      pane: 'basefallback',
+      interactive: false,
+      opacity: 1
+    }).addTo(this.map);
   }
 
   setBaseLayer(id: string) {
@@ -166,15 +195,15 @@ export class MarsMap {
         : `${import.meta.env.BASE_URL}tiles/offline/viking`;
 
     this.base = L.tileLayer(def.urlTemplate, {
-      tileSize: 256,
+      tileSize: TILE,
       noWrap: true,
-      bounds: MARS_WORLD_BOUNDS,
-      zoomOffset: -1,
-      minNativeZoom: 1,
-      maxNativeZoom: def.maxMatrix + 1,
+      bounds: WORLD,
+      zoomOffset: 0, // Leaflet z == Trek TileMatrix. (Earlier "-1" was wrong.)
+      minNativeZoom: 0,
+      maxNativeZoom: def.maxMatrix, // NOT maxMatrix + 1
       maxZoom: 11,
       attribution: def.attribution,
-      errorTileUrl: TRANSPARENT_PNG,
+      errorTileUrl: TRANSPARENT_PNG, // transparent, so fallback underlay shows through
       updateWhenIdle: true,
       keepBuffer: 2
     }).addTo(this.map);
@@ -182,10 +211,9 @@ export class MarsMap {
     this.base.on('tileerror', (e: any) => {
       const tile = e?.tile as HTMLElement | undefined;
       const coords = e?.coords;
-      // If we haven't attempted the offline local tile yet and this isn't already a local tile:
       if (tile && coords && !tile.getAttribute('data-tried-offline') && !def.urlTemplate.startsWith('/tiles/')) {
         tile.setAttribute('data-tried-offline', '1');
-        const z = coords.z - 1; // zoomOffset: -1
+        const z = coords.z; // zoomOffset: 0 -> z is coords.z directly
         (tile as HTMLImageElement).src = `${localPrefix}/${z}/${coords.y}/${coords.x}.jpg`;
         return;
       }
@@ -195,7 +223,22 @@ export class MarsMap {
     this.base.on('tileload', () => {
       if (this.tileErrors.length) this.tileErrors.length = 0;
     });
+
+    if (import.meta.env.DEV) {
+      this.base.on('tileloadstart', this.assertTileInGrid);
+    }
   }
+
+  // dev-only contract: a requested tile must exist in the matrix grid
+  private assertTileInGrid = (e: any) => {
+    const { x, y, z } = e.coords as { x: number; y: number; z: number };
+    const cols = 2 ** (z + 1);
+    const rows = 2 ** z;
+    ((window as any).__tileLog ??= []).push({ z, x, y });
+    if (x < 0 || x >= cols || y < 0 || y >= rows) {
+      console.error('TILE OUT OF GRID', { z, x, y, cols, rows });
+    }
+  };
 
   flyTo(lat: number, lonE: number, zoom?: number) {
     const reduced =
@@ -400,26 +443,17 @@ export class MarsMap {
   };
 
   private handleTileError = () => {
-    const now = Date.now();
-    this.tileErrors = this.tileErrors.filter((t) => now - t < 10_000);
+    const now = performance.now();
+    this.tileErrors = this.tileErrors.filter((t) => now - t < 10000);
     this.tileErrors.push(now);
 
-    if (this.tileErrors.length >= 15 && !this.fallback && this.o.fallbackImageUrl) {
-      this.fallback = L.imageOverlay(this.o.fallbackImageUrl, MARS_WORLD_BOUNDS, {
-        opacity: 1,
-        interactive: false
-      }).addTo(this.map);
-      this.fallback.bringToBack();
+    if (this.tileErrors.length >= 3) {
       this.o.onBackendDegraded?.(true);
     }
   };
 
   retryTiles() {
     this.tileErrors = [];
-    if (this.fallback) {
-      this.map.removeLayer(this.fallback);
-      this.fallback = undefined;
-    }
     this.o.onBackendDegraded?.(false);
     if (this.base) {
       this.base.redraw();

@@ -44,6 +44,24 @@ const isImage = async (url: string) => {
   }
 };
 
+async function getTileDimensions(name: string): Promise<{ width: number; height: number }> {
+  try {
+    const url = `${BASE}/${name}/1.0.0/WMTSCapabilities.xml`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (r.ok) {
+      const xml = await r.text();
+      const tw = xml.match(/<TileWidth>(\d+)<\/TileWidth>/)?.[1];
+      const th = xml.match(/<TileHeight>(\d+)<\/TileHeight>/)?.[1];
+      if (tw && th) {
+        return { width: parseInt(tw, 10), height: parseInt(th, 10) };
+      }
+    }
+  } catch (err) {
+    console.warn(`Could not fetch WMTSCapabilities for ${name}, defaulting to 256x256`);
+  }
+  return { width: 256, height: 256 };
+}
+
 async function resolve(name: string, ext: string) {
   const tpl = (m: number, r: number, c: number) =>
     `${BASE}/${name}/1.0.0/default/default028mm/${m}/${r}/${c}.${ext}`;
@@ -55,7 +73,8 @@ async function resolve(name: string, ext: string) {
     if (await isImage(tpl(m, row, col))) max = m;
     else break;
   }
-  return { max, template: `${BASE}/${name}/1.0.0/default/default028mm/{z}/{y}/{x}.${ext}` };
+  const dims = await getTileDimensions(name);
+  return { max, tileSize: dims.width, template: `${BASE}/${name}/1.0.0/default/default028mm/{z}/{y}/{x}.${ext}` };
 }
 
 async function main() {
@@ -73,9 +92,9 @@ async function main() {
             title: c.title,
             kind: c.kind,
             urlTemplate: r.template,
-            tileSize: 256,
-            minZoom: 1,
-            maxNativeZoom: r.max + 1,
+            tileSize: r.tileSize,
+            minZoom: 0,
+            maxNativeZoom: r.max,
             maxMatrix: r.max,
             ext,
             bbox: [-180, -90, 180, 90],
@@ -86,7 +105,7 @@ async function main() {
             active: c.id === 'viking-color',
             opacity: 1.0
           });
-          console.log(`OK   ${name}.${ext} maxMatrix: ${r.max}`);
+          console.log(`OK   ${name}.${ext} maxMatrix: ${r.max} tileSize: ${r.tileSize}`);
           resolved = true;
           break;
         } else {
@@ -95,6 +114,26 @@ async function main() {
       }
     }
   }
+
+  // Preserve local detailed offline cache layer if present
+  out.push({
+    id: 'gale-crater-offline',
+    title: 'Gale Crater Detailed (Offline Cache)',
+    kind: 'satellite',
+    urlTemplate: '/tiles/offline/viking/{z}/{y}/{x}.jpg',
+    tileSize: 256,
+    minZoom: 0,
+    maxNativeZoom: 7,
+    maxMatrix: 7,
+    ext: 'jpg',
+    bbox: [136.0, -7.5, 138.5, -4.5],
+    projection: 'equirectangular',
+    attribution: 'NASA/JPL/USGS · Mars Trek (Local Cache)',
+    provenance: 'NASA-DERIVED',
+    verifiedOn: new Date().toISOString().slice(0, 10),
+    active: false,
+    opacity: 1.0
+  });
 
   if (!out.length) {
     console.error('No Trek layer resolved. Check network / layer names.');

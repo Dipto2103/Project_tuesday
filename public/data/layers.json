@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-15T03:39:26.083Z",
+  "generatedAt": "2026-11-15T07:14:42.387Z",
   "layers": [
     {
       "id": "viking-color",
@@ -7,8 +7,8 @@
       "kind": "satellite",
       "urlTemplate": "https://trek.nasa.gov/tiles/Mars/EQ/Mars_Viking_MDIM21_ClrMosaic_global_232m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg",
       "tileSize": 256,
-      "minZoom": 1,
-      "maxNativeZoom": 8,
+      "minZoom": 0,
+      "maxNativeZoom": 7,
       "maxMatrix": 7,
       "ext": "jpg",
       "bbox": [
@@ -30,8 +30,8 @@
       "kind": "elevation",
       "urlTemplate": "https://trek.nasa.gov/tiles/Mars/EQ/Mars_MGS_MOLA_ClrShade_merge_global_463m/1.0.0/default/default028mm/{z}/{y}/{x}.jpg",
       "tileSize": 256,
-      "minZoom": 1,
-      "maxNativeZoom": 8,
+      "minZoom": 0,
+      "maxNativeZoom": 7,
       "maxMatrix": 7,
       "ext": "jpg",
       "bbox": [
@@ -53,12 +53,12 @@
       "kind": "satellite",
       "urlTemplate": "/tiles/offline/viking/{z}/{y}/{x}.jpg",
       "tileSize": 256,
-      "minZoom": 1,
-      "maxNativeZoom": 8,
+      "minZoom": 0,
+      "maxNativeZoom": 7,
       "maxMatrix": 7,
       "ext": "jpg",
       "bbox": [
-        136.0,
+        136,
         -7.5,
         138.5,
         -4.5
