@@ -265,7 +265,11 @@ export class MarsMap {
         [s, w],
         [n, e]
       ],
-      { animate: false }
+      {
+        animate: false,
+        paddingTopLeft: [64, 64],
+        paddingBottomRight: [64, 64]
+      }
     );
   }
 

@@ -112,7 +112,7 @@ export const MarsMapView: React.FC<MarsMapViewProps> = ({
   return (
     <div
       ref={host}
-      className="relative h-full w-full bg-[#0B0D10] select-none"
+      className="absolute inset-0 bg-[#0B0D10] select-none"
       role="application"
       aria-label="Mars map"
     />

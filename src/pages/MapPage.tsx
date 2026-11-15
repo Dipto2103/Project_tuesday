@@ -18,7 +18,8 @@ import {
   FileText,
   Car,
   ExternalLink,
-  Grid
+  Grid,
+  X
 } from 'lucide-react';
 import { MarsMapView } from '../map/MarsMapView';
 import { type MarsMap, type TrekLayerDef, type MarkerDef } from '../map/MarsMap';
@@ -60,6 +61,14 @@ export const MapPage: React.FC = () => {
   const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>('viking-color');
   const [mode, setMode] = useState<MapMode>('Terrain');
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  const [isRoverCardDismissed, setIsRoverCardDismissed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 320);
+    return () => clearTimeout(timer);
+  }, [isLeftPanelOpen]);
   const [isDegraded, setIsDegraded] = useState(false);
   const [showGraticule, setShowGraticule] = useState(true);
 
@@ -499,7 +508,7 @@ export const MapPage: React.FC = () => {
   ];
 
   return (
-    <div className="relative w-full h-full flex overflow-hidden bg-[#0B0D10] select-none">
+    <div className="relative w-full h-full flex min-h-0 overflow-hidden bg-[#0B0D10] select-none">
       {/* Left Control & Filter Panel (320px) */}
       <aside
         className={`absolute lg:relative z-20 top-0 bottom-0 left-0 w-80 bg-[#101114]/95 backdrop-blur-xl border-r border-[rgba(231,225,216,0.12)] shadow-2xl flex flex-col justify-between transition-transform duration-300 ease-out ${
@@ -820,7 +829,7 @@ export const MapPage: React.FC = () => {
       )}
 
       {/* Centre: Bounded Mars Map Canvas */}
-      <main className="flex-1 relative w-full h-full overflow-hidden">
+      <main className="flex-1 min-h-0 relative w-full h-full overflow-hidden">
         {/* Degraded Basemap Warning Banner (§4.4, §6) with Offline & Trek Bypass Actions */}
         {isDegraded && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-xl bg-[#101114]/95 border border-[#F38BA8] text-[#E7E1D8] text-xs font-mono shadow-2xl flex flex-wrap items-center gap-3 backdrop-blur-md max-w-[95vw]">
@@ -961,36 +970,53 @@ export const MapPage: React.FC = () => {
           </a>
         </div>
 
-        {/* Bottom-Right Mini Card: Rover Tracks */}
-        <div className="absolute bottom-6 right-4 z-20 hidden sm:block">
-          <div
-            onClick={() => setActiveLayers((p) => ({ ...p, rovers: !p.rovers }))}
-            className={`flex items-center gap-3 p-3 rounded-2xl bg-[#101114]/90 backdrop-blur-xl border transition-all cursor-pointer shadow-2xl hover:border-[#FF7043]/50 ${
-              activeLayers.rovers
-                ? 'border-[#FF7043]/40 ring-1 ring-[#FF7043]/20'
-                : 'border-[rgba(231,225,216,0.12)] opacity-70'
-            }`}
-          >
-            <div className="w-12 h-10 rounded-lg overflow-hidden bg-[#1C2027] shrink-0 border border-[rgba(231,225,216,0.10)] flex items-center justify-center">
-              <img
-                src={`${import.meta.env.BASE_URL}brand/icon-64.png`}
-                alt="Rover"
-                className="w-8 h-8 object-contain"
-              />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-display font-bold text-[#E7E1D8]">
-                  Rover Tracks
-                </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]" />
+        {/* Bottom-Right Mini Card: Rover Tracks (Dismissible to ensure full marker visibility) */}
+        {!isRoverCardDismissed && (
+          <div className="absolute bottom-6 right-4 z-20 hidden sm:block">
+            <div
+              className={`relative flex items-center gap-3 p-3 rounded-2xl bg-[#101114]/90 backdrop-blur-xl border transition-all shadow-2xl ${
+                activeLayers.rovers
+                  ? 'border-[#FF7043]/40 ring-1 ring-[#FF7043]/20'
+                  : 'border-[rgba(231,225,216,0.12)] opacity-70'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsRoverCardDismissed(true);
+                }}
+                className="absolute -top-2 -right-2 p-1 rounded-full bg-[#1C2027] border border-[rgba(231,225,216,0.15)] text-[#A0A0A0] hover:text-[#E7E1D8] transition-colors cursor-pointer"
+                title="Dismiss overlay"
+              >
+                <X className="w-3 h-3" />
+              </button>
+              <div
+                onClick={() => setActiveLayers((p) => ({ ...p, rovers: !p.rovers }))}
+                className="flex items-center gap-3 cursor-pointer"
+              >
+                <div className="w-12 h-10 rounded-lg overflow-hidden bg-[#1C2027] shrink-0 border border-[rgba(231,225,216,0.10)] flex items-center justify-center">
+                  <img
+                    src={`${import.meta.env.BASE_URL}brand/icon-64.png`}
+                    alt="Rover"
+                    className="w-8 h-8 object-contain"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-display font-bold text-[#E7E1D8]">
+                      Rover Tracks
+                    </span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]" />
+                  </div>
+                  <p className="text-[11px] font-mono text-[#A0A0A0]">
+                    Curiosity & Perseverance ({activeLayers.rovers ? 'Visible' : 'Hidden'})
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] font-mono text-[#A0A0A0]">
-                Curiosity & Perseverance ({activeLayers.rovers ? 'Visible' : 'Hidden'})
-              </p>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Map HUD: Bottom-Left Cursor Readout & OriginBadge */}
         <div className="absolute bottom-6 left-4 z-20 flex items-center gap-3 bg-[#101114]/85 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-[rgba(231,225,216,0.12)] text-xs font-mono text-[#E7E1D8] shadow-xl">

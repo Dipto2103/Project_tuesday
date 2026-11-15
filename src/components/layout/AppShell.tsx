@@ -62,13 +62,13 @@ export const AppShell: React.FC = () => {
       <TopBar onOpenSearch={() => setIsSearchOpen(true)} />
 
       {/* Main Body: Left Icon Rail (Desktop) + Page Outlet */}
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
         <SideRail />
 
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 relative h-full overflow-y-auto flex flex-col focus:outline-none"
+          className="flex-1 min-h-0 relative h-full overflow-hidden flex flex-col focus:outline-none"
         >
           <Outlet context={{ checkpoints }} />
         </main>
