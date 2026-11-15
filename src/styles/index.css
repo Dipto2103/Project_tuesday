@@ -58,6 +58,46 @@
   color: #ff6738 !important;
 }
 
+/* Mars Lantern Scale and Marker styles (§4.4, §4.5) */
+.ml-scale {
+  background: rgba(16, 17, 20, 0.85);
+  border: 1px solid rgba(231, 225, 216, 0.25);
+  border-top: none;
+  color: #E7E1D8;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  text-align: center;
+  backdrop-filter: blur(6px);
+  margin-bottom: 8px !important;
+  margin-left: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  border-radius: 0 0 2px 2px;
+}
+
+.ml-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease-out;
+}
+
+.ml-marker:hover {
+  transform: scale(1.15);
+  z-index: 1000 !important;
+}
+
+.ml-marker-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #E75D35;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 8px rgba(231, 93, 53, 0.8);
+}
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

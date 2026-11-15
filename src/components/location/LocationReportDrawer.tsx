@@ -18,6 +18,7 @@ import {
 import type { LocationReport, ResourceHit, HazardHit } from '../../core/types';
 import type { MarsCoordinate } from '../../types/route';
 import { formatPlanetocentric } from '../../core/geo';
+import { trekDeepLink } from '../../core/trekLink';
 
 interface LocationReportDrawerProps {
   report: LocationReport | null;
@@ -165,6 +166,16 @@ export const LocationReportDrawer: React.FC<LocationReportDrawerProps> = ({
             <Navigation className="w-3.5 h-3.5 text-mars-orange" />
             <span>Set Target (B)</span>
           </button>
+          <a
+            href={trekDeepLink(report.lat, report.lonE, 9)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-1.5 px-2.5 rounded-lg bg-sky-950/80 hover:bg-sky-800 text-sky-300 border border-sky-500/40 text-[11px] font-mono font-medium flex items-center justify-center gap-1.5 transition-colors shrink-0"
+            title="Open this location in NASA Mars Trek"
+          >
+            <Compass className="w-3.5 h-3.5 text-sky-400" />
+            <span>Trek</span>
+          </a>
         </div>
 
         {/* Topography & Elevation */}

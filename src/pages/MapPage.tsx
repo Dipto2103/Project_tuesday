@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -16,9 +16,14 @@ import {
   ChevronRight,
   ShieldAlert,
   FileText,
-  Car
+  Car,
+  ExternalLink,
+  Grid
 } from 'lucide-react';
-import { MarsMap } from '../components/map/MarsMap';
+import { MarsMapView } from '../map/MarsMapView';
+import { type MarsMap, type TrekLayerDef, type MarkerDef } from '../map/MarsMap';
+import { loadTrekLayers, FALLBACK_TREK_LAYERS } from '../map/layers';
+import { trekDeepLink } from '../core/trekLink';
 import { GlassPanel } from '../components/ui/GlassPanel';
 import { SegmentedControl } from '../components/ui/Tabs';
 import { Chip } from '../components/ui/Chip';
@@ -26,7 +31,6 @@ import { Button } from '../components/ui/Button';
 import { ProvenanceBadge } from '../components/ui/ProvenanceBadge';
 import { OriginBadge } from '../components/ui/OriginBadge';
 import { LocationReportDrawer } from '../components/location/LocationReportDrawer';
-import { useMarsLayers } from '../hooks/useMarsLayers';
 import { useRoutePlanner } from '../hooks/useRoutePlanner';
 import { useRouteStore } from '../state/routeStore';
 import type { RouteResult } from '../core/route/types';
@@ -37,7 +41,7 @@ import { getLocationReport } from '../core/report';
 import { searchLocations, parseCoordinateInput } from '../core/search';
 import { calculateTerrainQuality } from '../core/terrain';
 import { getElevationM, getSlopeDeg } from '../core/dem';
-import { normalizeLon360 } from '../core/geo';
+import { normalizeLon360, lon360ToDisplay } from '../core/geo';
 import type { Checkpoint, LocationReport } from '../core/types';
 import type { MarsCoordinate, PlannedRoute } from '../types/route';
 
@@ -46,16 +50,23 @@ type MapMode = 'Terrain' | 'Elevation' | 'Hazard';
 export const MapPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const mapRef = useRef<MarsMap | null>(null);
 
-  // Map state
+  // Map and layer states
+  const [trekLayers, setTrekLayers] = useState<TrekLayerDef[]>(FALLBACK_TREK_LAYERS);
+  const [activeBaseLayerId, setActiveBaseLayerId] = useState<string>('viking-color');
   const [mode, setMode] = useState<MapMode>('Terrain');
   const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
+  const [isDegraded, setIsDegraded] = useState(false);
+  const [showGraticule, setShowGraticule] = useState(true);
+
+  // Data collections
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
 
-  // Filter toggles
+  // Layer filter toggles
   const [activeLayers, setActiveLayers] = useState<Record<string, boolean>>({
     landing: true,
     poi: true,
@@ -67,28 +78,31 @@ export const MapPage: React.FC = () => {
   const [activeResources, setActiveResources] = useState<string[]>([]);
 
   // Selection & Coordinates
-  const [cursorCoord, setCursorCoord] = useState<MarsCoordinate | null>(null);
+  const [cursorCoord, setCursorCoord] = useState<{
+    latitude: number;
+    longitude: number;
+    displayLon: number;
+    elevationMeters?: number | null;
+  } | null>(null);
+
   const [selectedCoord, setSelectedCoord] = useState<MarsCoordinate | null>({
     latitude: 18.4447,
     longitude: 77.4508
   });
-  const [centerTarget, setCenterTarget] = useState<MarsCoordinate | null>(null);
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<Checkpoint | null>(null);
 
   // Drawer
   const [activeReport, setActiveReport] = useState<LocationReport | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
 
-  // Mars layers & routing hooks
-  const { layers, activeBaseLayer, activeOverlays, toggleLayer, setActiveBaseLayer } = useMarsLayers();
+  // Routing
   const store = useRouteStore();
   const {
     startCoord,
     destCoord,
     setStartCoord,
     setDestCoord,
-    primaryRoute,
-    alternativeRoute
+    primaryRoute
   } = useRoutePlanner();
 
   const storedPrimaryRoute: PlannedRoute | null = useMemo(() => {
@@ -103,7 +117,12 @@ export const MapPage: React.FC = () => {
       waypoints,
       distanceKm: successRoute.distanceKm,
       estimatedDurationHours: successRoute.timeHours,
-      method: successRoute.mode === 'A_DIRECT' ? 'direct' : successRoute.mode === 'C_ROVER_REFERENCE' ? 'historical-rover-reference' : 'terrain-aware',
+      method:
+        successRoute.mode === 'A_DIRECT'
+          ? 'direct'
+          : successRoute.mode === 'C_ROVER_REFERENCE'
+          ? 'historical-rover-reference'
+          : 'terrain-aware',
       terrainAssessmentAvailable: true,
       maxSlopeDeg: successRoute.maxSlopeDeg ?? undefined,
       averageSlopeDeg: successRoute.meanSlopeDeg ?? undefined,
@@ -116,13 +135,19 @@ export const MapPage: React.FC = () => {
 
   const activePrimaryRoute = storedPrimaryRoute || primaryRoute;
 
-  // Load checkpoints
+  // Load verified Trek layers
+  useEffect(() => {
+    loadTrekLayers().then((loaded) => {
+      setTrekLayers(loaded);
+    });
+  }, []);
+
+  // Load checkpoints and handle query params
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/checkpoints.json`)
       .then((r) => r.json())
       .then((data: Checkpoint[]) => {
         setCheckpoints(data);
-        // Find default or param checkpoint
         const latParam = searchParams.get('lat');
         const lonParam = searchParams.get('lon');
         if (latParam && lonParam) {
@@ -131,7 +156,7 @@ export const MapPage: React.FC = () => {
           if (!isNaN(lat) && !isNaN(lon)) {
             const coord = { latitude: lat, longitude: lon };
             setSelectedCoord(coord);
-            setCenterTarget(coord);
+            mapRef.current?.flyTo(lat, lon);
             const found = data.find(
               (c) => Math.abs(c.lat - lat) < 0.2 && Math.abs(c.lonE - normalizeLon360(lon)) < 0.2
             );
@@ -149,11 +174,12 @@ export const MapPage: React.FC = () => {
   const handleModeChange = (newMode: MapMode) => {
     setMode(newMode);
     if (newMode === 'Terrain') {
-      setActiveBaseLayer('nasa-trek-viking');
+      setActiveBaseLayerId('viking-color');
     } else if (newMode === 'Elevation') {
-      setActiveBaseLayer('nasa-trek-mola-color');
+      const hasMola = trekLayers.some((l) => l.id === 'mola-shaded-relief');
+      setActiveBaseLayerId(hasMola ? 'mola-shaded-relief' : 'viking-color');
     } else if (newMode === 'Hazard') {
-      setActiveBaseLayer('nasa-trek-viking');
+      setActiveBaseLayerId('viking-color');
       setActiveLayers((prev) => ({ ...prev, hazards: true }));
     }
   };
@@ -177,7 +203,6 @@ export const MapPage: React.FC = () => {
       const report = getLocationReport({ lat: coord.latitude, lonE }, checkpoints);
       setActiveReport(report);
 
-      // Match closest checkpoint if within 15 km
       const closest = checkpoints.find((c) => {
         const dLat = Math.abs(c.lat - coord.latitude);
         const dLon = Math.abs(c.lonE - lonE);
@@ -186,6 +211,28 @@ export const MapPage: React.FC = () => {
       setSelectedCheckpoint(closest || null);
     },
     [checkpoints]
+  );
+
+  const handleMapClick = useCallback(
+    (p: { lat: number; lonE: number }) => {
+      const coord = { latitude: p.lat, longitude: p.lonE };
+      handleSelectCoordinate(coord);
+      setIsReportOpen(true);
+    },
+    [handleSelectCoordinate]
+  );
+
+  const handleCursorMove = useCallback(
+    (p: { lat: number; lonE: number; displayLon: number }) => {
+      const elev = getElevationM(p.lat, p.lonE)?.value ?? null;
+      setCursorCoord({
+        latitude: p.lat,
+        longitude: p.lonE,
+        displayLon: p.displayLon,
+        elevationMeters: elev
+      });
+    },
+    []
   );
 
   const handleSetStart = useCallback(
@@ -203,27 +250,30 @@ export const MapPage: React.FC = () => {
   );
 
   const handleZoomIn = () => {
-    window.dispatchEvent(new CustomEvent('ares-zoom-in'));
+    mapRef.current?.zoomIn();
   };
 
   const handleZoomOut = () => {
-    window.dispatchEvent(new CustomEvent('ares-zoom-out'));
+    mapRef.current?.zoomOut();
   };
 
   const handleResetView = () => {
     const jezero = { latitude: 18.4447, longitude: 77.4508 };
-    setCenterTarget({ ...jezero });
+    mapRef.current?.flyTo(jezero.latitude, jezero.longitude, 7);
     setSelectedCoord(jezero);
+    handleSelectCoordinate(jezero);
   };
 
   const handleLocatePrompt = () => {
-    const input = window.prompt('Enter Martian coordinates (e.g. "18.44N, 77.45E" or "-4.59, 137.44"):');
+    const input = window.prompt(
+      'Enter Martian coordinates (e.g. "18.44N, 77.45E" or "-4.59, 137.44"):'
+    );
     if (input) {
       const parsed = parseCoordinateInput(input);
       if (parsed) {
         const coord = { latitude: parsed.lat, longitude: parsed.lonE };
         setSelectedCoord(coord);
-        setCenterTarget(coord);
+        mapRef.current?.flyTo(parsed.lat, parsed.lonE, 7);
         handleSelectCoordinate(coord);
       } else {
         alert('Could not parse coordinate format. Please use "Lat, Lon" e.g. 18.44, 77.45');
@@ -231,19 +281,150 @@ export const MapPage: React.FC = () => {
     }
   };
 
-  // Filter categories passed to MarsMap
-  const activeCategories = useMemo(() => {
-    const list: string[] = [];
-    if (activeLayers.landing) list.push('landing_site', 'human_base');
-    if (activeLayers.poi) list.push('geology', 'crater', 'volcano', 'canyon');
-    if (activeLayers.hazards) list.push('hazard', 'rsl', 'scarp', 'dunes');
-    return [...list, ...activeResources];
-  }, [activeLayers, activeResources]);
+  // Convert and memoize markers
+  const markers: MarkerDef[] = useMemo(() => {
+    const list: MarkerDef[] = [];
+
+    for (const c of checkpoints) {
+      if (c.kind === 'landing_site' && !activeLayers.landing) continue;
+      if (c.kind === 'landmark' && !activeLayers.poi) continue;
+      if (c.kind === 'science_site' && !activeLayers.poi) continue;
+      if (c.kind === 'hazard' && !activeLayers.hazards) continue;
+
+      const isSelected =
+        selectedCheckpoint?.id === c.id ||
+        (selectedCoord &&
+          Math.abs(c.lat - selectedCoord.latitude) < 0.05 &&
+          Math.abs(c.lonE - normalizeLon360(selectedCoord.longitude)) < 0.05);
+
+      const color =
+        c.kind === 'landing_site'
+          ? '#56D9E8'
+          : c.kind === 'hazard'
+          ? '#EF4444'
+          : c.kind === 'science_site'
+          ? '#A78BFA'
+          : '#FF7043';
+
+      const iconChar =
+        c.kind === 'landing_site'
+          ? '✦'
+          : c.kind === 'hazard'
+          ? '▲'
+          : c.kind === 'science_site'
+          ? '◆'
+          : '●';
+
+      const html = `
+        <div style="position:relative; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
+          ${
+            isSelected
+              ? `<div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid ${color}; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; opacity:0.75;"></div>`
+              : ''
+          }
+          <div style="width:20px; height:20px; border-radius:50%; background:#101114; border:2px solid ${color}; color:${color}; font-size:10px; font-weight:bold; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,0.6);">
+            ${iconChar}
+          </div>
+        </div>
+      `;
+
+      list.push({
+        id: c.id,
+        lat: c.lat,
+        lonE: c.lonE,
+        label: c.name,
+        html,
+        onClick: () => {
+          const coord = { latitude: c.lat, longitude: c.lonE };
+          setSelectedCoord(coord);
+          setSelectedCheckpoint(c);
+          mapRef.current?.flyTo(c.lat, c.lonE);
+          const report = getLocationReport({ lat: c.lat, lonE: c.lonE }, checkpoints);
+          setActiveReport(report);
+          setIsReportOpen(true);
+        }
+      });
+    }
+
+    // Selected location pin
+    if (
+      selectedCoord &&
+      (!selectedCheckpoint ||
+        Math.abs(selectedCheckpoint.lat - selectedCoord.latitude) >= 0.05 ||
+        Math.abs(selectedCheckpoint.lonE - normalizeLon360(selectedCoord.longitude)) >= 0.05)
+    ) {
+      list.push({
+        id: 'selected-location-pin',
+        lat: selectedCoord.latitude,
+        lonE: normalizeLon360(selectedCoord.longitude),
+        label: 'Selected Coordinate',
+        html: `
+          <div style="position:relative; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">
+            <div style="position:absolute; inset:-4px; border-radius:50%; border:2px solid #56D9E8; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; opacity:0.75;"></div>
+            <div style="width:16px; height:16px; border-radius:50%; background:#56D9E8; border:2px solid #FFFFFF; box-shadow:0 0 10px #56D9E8;"></div>
+          </div>
+        `
+      });
+    }
+
+    return list;
+  }, [checkpoints, activeLayers, selectedCheckpoint, selectedCoord]);
+
+  // Convert route into segments (ok / steep / nodata)
+  const routeSegments = useMemo(() => {
+    const segments: { points: [number, number][]; flag: 'ok' | 'steep' | 'nodata' }[] = [];
+
+    // 1. Primary Planned Route
+    if (activeLayers.route && activePrimaryRoute?.waypoints && activePrimaryRoute.waypoints.length >= 2) {
+      const pts = activePrimaryRoute.waypoints;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const slope =
+          activePrimaryRoute.elevationProfile?.[i]?.slopeDeg ??
+          getSlopeDeg(p1.latitude, normalizeLon360(p1.longitude));
+
+        const flag: 'ok' | 'steep' | 'nodata' =
+          slope === null || slope === undefined || isNaN(slope)
+            ? 'nodata'
+            : slope > 15
+            ? 'steep'
+            : 'ok';
+
+        segments.push({
+          points: [
+            [p1.latitude, p1.longitude],
+            [p2.latitude, p2.longitude]
+          ],
+          flag
+        });
+      }
+    }
+
+    // 2. Rover Traverses
+    if (activeLayers.rovers) {
+      for (const rover of ALL_ROVER_TRAVERSES) {
+        if (!rover.waypoints || rover.waypoints.length < 2) continue;
+        for (let i = 0; i < rover.waypoints.length - 1; i++) {
+          segments.push({
+            points: [
+              [rover.waypoints[i].latitude, rover.waypoints[i].longitude],
+              [rover.waypoints[i + 1].latitude, rover.waypoints[i + 1].longitude]
+            ],
+            flag: 'ok'
+          });
+        }
+      }
+    }
+
+    return segments;
+  }, [activeLayers.route, activeLayers.rovers, activePrimaryRoute]);
 
   // Selected location metrics
   const selectedElev = useMemo(() => {
     if (!selectedCoord) return null;
-    return getElevationM(selectedCoord.latitude, normalizeLon360(selectedCoord.longitude));
+    const elev = getElevationM(selectedCoord.latitude, normalizeLon360(selectedCoord.longitude));
+    return elev ? elev.value : null;
   }, [selectedCoord]);
 
   const selectedSlope = useMemo(() => {
@@ -259,7 +440,25 @@ export const MapPage: React.FC = () => {
   }, [selectedSlope]);
 
   const terrainDifficultyText =
-    terrainAssessment.class === 'Favourable' ? 'Low' : terrainAssessment.class === 'Moderate' ? 'Moderate' : 'High';
+    terrainAssessment.class === 'Favourable'
+      ? 'Low'
+      : terrainAssessment.class === 'Moderate'
+      ? 'Moderate'
+      : 'High';
+
+  const cursorElev = useMemo(() => {
+    if (!cursorCoord) return null;
+    return (
+      cursorCoord.elevationMeters ??
+      getElevationM(cursorCoord.latitude, normalizeLon360(cursorCoord.longitude))?.value ??
+      null
+    );
+  }, [cursorCoord]);
+
+  const cursorSlope = useMemo(() => {
+    if (!cursorCoord) return null;
+    return getSlopeDeg(cursorCoord.latitude, normalizeLon360(cursorCoord.longitude));
+  }, [cursorCoord]);
 
   const resourceTypes = [
     { id: 'water_ice', label: 'Water-ice', color: '#56D9E8' },
@@ -290,7 +489,7 @@ export const MapPage: React.FC = () => {
             </div>
             <button
               onClick={() => setIsLeftPanelOpen(false)}
-              className="p-1 rounded-lg text-[#A0A0A0] hover:text-[#E7E1D8] lg:hidden"
+              className="p-1 rounded-lg text-[#A0A0A0] hover:text-[#E7E1D8] lg:hidden cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -340,7 +539,7 @@ export const MapPage: React.FC = () => {
                     onClick={() => {
                       const coord = { latitude: res.lat, longitude: res.lonE };
                       setSelectedCoord(coord);
-                      setCenterTarget(coord);
+                      mapRef.current?.flyTo(res.lat, res.lonE, 7);
                       handleSelectCoordinate(coord);
                       setShowSearchResults(false);
                       setSearchQuery(res.title);
@@ -462,7 +661,7 @@ export const MapPage: React.FC = () => {
             <span className="text-[10px] font-mono tracking-widest uppercase text-[#FF7043] font-bold">
               SELECTED LOCATION
             </span>
-            <ProvenanceBadge type="NASA-DERIVED" source="MOLA Altimetry" showIcon={false} />
+            <ProvenanceBadge type="NASA-DERIVED" />
           </div>
 
           <div className="flex items-start gap-2.5 mb-3">
@@ -484,7 +683,7 @@ export const MapPage: React.FC = () => {
             <div className="flex justify-between items-center">
               <span className="text-[#A0A0A0]">Elevation</span>
               <span className="font-bold text-[#E7E1D8]">
-                {selectedElev !== null ? `${selectedElev.value > 0 ? '+' : ''}${selectedElev.value.toLocaleString()} m` : 'Calculating...'}
+                {selectedElev !== null ? `${selectedElev > 0 ? '+' : ''}${selectedElev.toLocaleString()} m` : 'Calculating...'}
               </span>
             </div>
             <div className="flex justify-between items-center">
@@ -549,35 +748,51 @@ export const MapPage: React.FC = () => {
 
       {/* Centre: Bounded Mars Map Canvas */}
       <main className="flex-1 relative w-full h-full overflow-hidden">
-        <MarsMap
-          activeBaseLayer={activeBaseLayer}
-          activeOverlays={activeOverlays}
-          startCoord={startCoord}
-          destCoord={destCoord}
-          selectedCoord={selectedCoord}
-          checkpoints={checkpoints}
-          activeCategories={activeCategories}
-          primaryRoute={activePrimaryRoute}
-          alternativeRoute={alternativeRoute}
-          sciencePOIs={SCIENCE_CATALOG}
-          hazards={HAZARDS_CATALOG}
-          onSelectCoordinate={handleSelectCoordinate}
-          onSetStart={handleSetStart}
-          onSetDestination={handleSetDestination}
-          onCursorMove={setCursorCoord}
-          centerTarget={centerTarget}
-          showRoverTraverses={activeLayers.rovers}
+        {/* Degraded Basemap Warning Banner (§4.4, §6) */}
+        {isDegraded && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl bg-amber-950/90 border border-amber-500/40 text-amber-200 text-xs font-mono shadow-2xl flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Cached basemap active — detailed tiles unavailable</span>
+            <ProvenanceBadge type="NASA-DERIVED" />
+          </div>
+        )}
+
+        <MarsMapView
+          layers={trekLayers}
+          baseLayerId={activeBaseLayerId}
+          markers={markers}
+          initial={{ lat: 18.4447, lonE: 77.4508, zoom: 6 }}
+          onMapClick={handleMapClick}
+          onCursorMove={handleCursorMove}
+          onBackendDegraded={setIsDegraded}
+          routeSegments={routeSegments}
+          showGraticule={showGraticule}
+          mapInstanceRef={mapRef}
         />
 
         {/* Right Map Controls (Vertical Stack of Glass Icon Buttons) */}
         <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => handleModeChange(mode === 'Terrain' ? 'Elevation' : mode === 'Elevation' ? 'Hazard' : 'Terrain')}
+            onClick={() =>
+              handleModeChange(
+                mode === 'Terrain' ? 'Elevation' : mode === 'Elevation' ? 'Hazard' : 'Terrain'
+              )
+            }
             className="p-3 rounded-xl bg-[#101114]/85 backdrop-blur-md border border-[rgba(231,225,216,0.12)] text-[#E7E1D8] hover:text-[#FF7043] hover:bg-[#1C2027] shadow-xl transition-all cursor-pointer"
             title={`Toggle Basemap Mode (Current: ${mode})`}
           >
             <Layers className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowGraticule((prev) => !prev)}
+            className={`p-3 rounded-xl bg-[#101114]/85 backdrop-blur-md border border-[rgba(231,225,216,0.12)] hover:bg-[#1C2027] shadow-xl transition-all cursor-pointer ${
+              showGraticule ? 'text-[#56D9E8]' : 'text-[#A0A0A0]'
+            }`}
+            title="Toggle 30° Graticule Grid"
+          >
+            <Grid className="w-5 h-5" />
           </button>
           <button
             type="button"
@@ -611,9 +826,23 @@ export const MapPage: React.FC = () => {
           >
             <Crosshair className="w-5 h-5" />
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              const lat = selectedCoord ? selectedCoord.latitude : 18.4447;
+              const lonE = selectedCoord ? normalizeLon360(selectedCoord.longitude) : 77.4508;
+              const z = Math.round(mapRef.current?.getZoom() ?? 9);
+              window.open(trekDeepLink(lat, lonE, z), '_blank', 'noopener,noreferrer');
+            }}
+            className="p-3 rounded-xl bg-[#101114]/85 backdrop-blur-md border border-[rgba(231,225,216,0.12)] text-[#E7E1D8] hover:text-[#56D9E8] hover:bg-[#1C2027] shadow-xl transition-all cursor-pointer"
+            title="Open current view in NASA Mars Trek"
+            aria-label="Open current view in NASA Mars Trek"
+          >
+            <ExternalLink className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Bottom-Right Mini Card: Rover Tracks Curiosity */}
+        {/* Bottom-Right Mini Card: Rover Tracks */}
         <div className="absolute bottom-6 right-4 z-20 hidden sm:block">
           <div
             onClick={() => setActiveLayers((p) => ({ ...p, rovers: !p.rovers }))}
@@ -650,12 +879,31 @@ export const MapPage: React.FC = () => {
             <span className="text-[#A0A0A0]">CURSOR:</span>
             <span>
               {cursorCoord
-                ? `${cursorCoord.latitude.toFixed(2)}°N, ${normalizeLon360(cursorCoord.longitude).toFixed(2)}°E`
+                ? `${cursorCoord.latitude.toFixed(2)}°N, ${normalizeLon360(cursorCoord.longitude).toFixed(2)}°E (${(cursorCoord.displayLon).toFixed(2)}° disp)`
                 : 'Over surface'}
             </span>
           </div>
           <span className="text-[#6B6F76]">•</span>
-          <OriginBadge origin="CACHED" />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#A0A0A0]">ELEV:</span>
+            <span>
+              {cursorElev !== null && cursorElev !== undefined
+                ? `${cursorElev > 0 ? '+' : ''}${cursorElev.toFixed(0)} m`
+                : '—'}
+            </span>
+            <ProvenanceBadge type="NASA-DERIVED" />
+          </div>
+          <span className="text-[#6B6F76]">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#A0A0A0]">SLOPE:</span>
+            <span>
+              {cursorSlope !== null && cursorSlope !== undefined
+                ? `${cursorSlope.toFixed(1)}°`
+                : '—'}
+            </span>
+          </div>
+          <span className="text-[#6B6F76]">•</span>
+          <OriginBadge origin={isDegraded ? 'CACHED' : 'LIVE'} />
         </div>
 
         {/* Bottom Route Bar (When Route Exists) */}
@@ -667,11 +915,15 @@ export const MapPage: React.FC = () => {
             </div>
             <div>
               <span className="text-[#A0A0A0] text-[10px] uppercase block">TIME</span>
-              <span className="font-bold text-[#E7E1D8]">{((activePrimaryRoute.estimatedDurationHours || 78.4) / 24.66).toFixed(1)} sols</span>
+              <span className="font-bold text-[#E7E1D8]">
+                {((activePrimaryRoute.estimatedDurationHours || 78.4) / 24.66).toFixed(1)} sols
+              </span>
             </div>
             <div>
               <span className="text-[#A0A0A0] text-[10px] uppercase block">SLOPE RISK</span>
-              <span className="font-bold text-[#4ADE80]">{(activePrimaryRoute.maxSlopeDeg || 14) < 15 ? 'Safe' : 'Caution'}</span>
+              <span className="font-bold text-[#4ADE80]">
+                {(activePrimaryRoute.maxSlopeDeg || 14) < 15 ? 'Safe' : 'Caution'}
+              </span>
             </div>
             <Button
               variant="primary"
