@@ -55,7 +55,7 @@ Every numerical metric, cartographic layer, and resource claim in MARS LANTERN c
 - **Modeled Temperature:** Surface temperature is a labeled engineering estimate ($\pm 15\,\text{K}$ uncertainty) unless anchored within 500 km of a cited lander log.
 - **Natural Satellites:** Phobos and Deimos positions are approximate equatorial models.
 - **Survival Model:** Life support numbers are simulation assumptions derived from NASA BVAD standards, not flight-certified flight rules.
-- **Trek Tiles:** Dependent on NASA WMTS server availability. The app provides a pre-rendered 4096×2048 offline fallback basemap (`public/tiles/fallback-global.jpg`) that engages automatically when offline or after 5 tile errors.
+- **Trek Tiles & Fallback Underlay:** Dependent on NASA WMTS server availability. The app provides a pre-rendered 2:1 equirectangular Viking MDIM 2.1 colorized mosaic offline fallback basemap (`public/tiles/fallback-global.jpg`, −180…180°, 90…−90°) permanently mounted in a custom Leaflet map pane (`basefallback`, zIndex 150) underneath `tilePane` (zIndex 200). It ensures that during tile load, offline mode, network drops, or missing regional tiles, the user always sees the authentic NASA Viking color global mosaic, preventing any blank or blue container exposure. Regional overlays (such as HiRISE or local detailed caches) render transparently over this continuous base.
 
 ---
 
