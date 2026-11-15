@@ -39,7 +39,7 @@ import { calculateTerrainQuality } from '../core/terrain';
 import { getElevationM, getSlopeDeg } from '../core/dem';
 import { normalizeLon360 } from '../core/geo';
 import type { Checkpoint, LocationReport } from '../core/types';
-import type { MarsCoordinate } from '../types/route';
+import type { MarsCoordinate, PlannedRoute } from '../types/route';
 
 type MapMode = 'Terrain' | 'Elevation' | 'Hazard';
 

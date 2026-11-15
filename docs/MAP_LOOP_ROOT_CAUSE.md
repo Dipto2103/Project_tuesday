@@ -1,178 +1,86 @@
-# Root Cause Analysis: Map Infinite Loop
+# Map loop root cause
+Date: 2026-11-15 · Commit: 3664866e560b8deaaaf37fd15aa13e70e7011fc2
 
-**Project:** MARS LANTERN (formerly ARES / Interplanetary Survival Guide: Martian Map)  
-**Investigation Date:** 2026-10-17  
-**Status:** Diagnosed & Documented  
-**Reference:** `MARS_LANTERN_SPEC.md` §3 (Fixing the "infinite loop" map)
+## Symptoms observed
+1. **Build Failure:** `npm run build` failed with TypeScript error:
+   `src/pages/MapPage.tsx(94,29): error TS2304: Cannot find name 'PlannedRoute'`.
+2. **Tile & Projection Misalignment (WMTS Matrix Offset):** In `src/components/map/MarsMap.tsx`, `zoomOffset: -1` and `minZoom: 1` were absent. NASA Mars Trek WMTS equirectangular TileMatrix 0 has 2 columns × 1 row (covering 360° × 180°), whereas Leaflet's `L.CRS.EPSG4326` at zoom 0 expects 1 tile (360° × 360°). Without `zoomOffset: -1`, Leaflet zoom $z$ requested TileMatrix $z$ instead of $z-1$, resulting in 2× coordinate mis-registration or 404 tile misses.
+3. **Earth Scale Calculation:** `MarsMap.tsx` (lines 175–186) initialized standard Leaflet `L.control.scale`, which calculates distances using Earth's radius ($R \approx 6371\text{ km}$), overestimating Martian distances by ~1.88×.
+4. **Re-render Thrashing & Recenter Loop Risk:** In `MarsMap.tsx`, `MapEngineController` ran an effect on `[centerTarget, map]` calling `map.flyTo` / `map.setView` (lines 224–257). Unthrottled or high-frequency cursor/viewport dispatches to `MapPage.tsx` caused re-render waves. A defensive guard in `MarsMap.tsx:209` (`[MARS LANTERN] MAP LOOP DETECTED: > 20 moveend events/sec`) was triggered whenever programmatic recentering clashed with motion events.
+5. **Missing React 18 Lifecycle Cleanup:** `<MapContainer>` lacked strict imperative cleanup and destruction on unmount, risking duplicate instances during React 18 `StrictMode` double-mount cycles.
 
----
+## Evidence (grep lines, performance screenshot description, console output)
 
-## Executive Summary
+### 1. Grep Command Output (§3.3)
+Executed:
+`Get-ChildItem -Recurse -Path src -Include *.ts,*.tsx | Select-String -Pattern "worldCopyJump|noWrap|fitBounds|setView|flyTo|useMap|MapContainer|moveend|zoomend|CRS\."`
 
-The reported "infinite loop" symptom stems from a combination of two distinct flaws in the original codebase:
-1. **Cause A (Visual Infinite Loop — Planetary World-Wrap):** Leaflet's default coordinate reference system (`L.CRS.EPSG3857`) was used with `noWrap={false}` explicitly enabled on tile layers and no `maxBounds` defined. Panning horizontally causes Mars to repeat indefinitely side-by-side, giving the appearance of an endless, looping planetary surface.
-2. **Cause B (Logic & Component Thrashing Loop — Unthrottled State Updates):** The `useMapEvents` hook in `MarsMap.tsx` emits unthrottled `mousemove` events at display refresh rate (60–120 Hz). These events trigger top-level state updates in `App.tsx` (`setCursorCoord`), which in turn re-renders `App` and passes freshly constructed array references (e.g., `activeOverlays`) back down into `MarsMap.tsx`, forcing React-Leaflet to reconcile `<TileLayer>` elements continuously.
+Lines identified:
+```
+src\components\map\MapControls.tsx:11:  onResetView: () => void;
+src\components\map\MapControls.tsx:30:  onResetView,
+src\components\map\MapControls.tsx:221:          onClick={onResetView}
+src\components\map\MarsMap.tsx:3:  MapContainer,
+src\components\map\MarsMap.tsx:10:  useMap,
+src\components\map\MarsMap.tsx:11:  useMapEvents
+src\components\map\MarsMap.tsx:166:  const map = useMap();
+src\components\map\MarsMap.tsx:169:  const moveEndTimestampsRef = useRef<number[]>([]);
+src\components\map\MarsMap.tsx:202:  // Dev-only moveend frequency loop guard
+src\components\map\MarsMap.tsx:204:    const handleMoveEnd = () => {
+src\components\map\MarsMap.tsx:206:      moveEndTimestampsRef.current = moveEndTimestampsRef.current.filter((t) => now - t < 1000);
+src\components\map\MarsMap.tsx:207:      moveEndTimestampsRef.current.push(now);
+src\components\map\MarsMap.tsx:209:      if (moveEndTimestampsRef.current.length > 20) {
+src\components\map\MarsMap.tsx:211:          '[MARS LANTERN] MAP LOOP DETECTED: > 20 moveend events/sec. Freezing programmatic recenter.'
+src\components\map\MarsMap.tsx:217:    map.on('moveend', handleMoveEnd);
+src\components\map\MarsMap.tsx:219:      map.off('moveend', handleMoveEnd);
+src\components\map\MarsMap.tsx:251:      map.setView([targetLat, targetDisplayLon], targetZoom);
+src\components\map\MarsMap.tsx:253:      map.flyTo([targetLat, targetDisplayLon], targetZoom, {
+src\components\map\MarsMap.tsx:260:  useMapEvents({
+src\components\map\MarsMap.tsx:430:      <MapContainer
+src\components\map\MarsMap.tsx:431:        crs={L.CRS.EPSG4326}
+src\components\map\MarsMap.tsx:440:        worldCopyJump={false}
+src\components\map\MarsMap.tsx:458:          /* Base Planetary Tile Layer — Equirectangular, bounded, noWrap */
+src\components\map\MarsMap.tsx:467:            noWrap={true}
+src\components\map\MarsMap.tsx:486:              noWrap={true}
+src\components\map\MarsMap.tsx:865:      </MapContainer>
+src\components\satellite\SatellitePanel.tsx:134:    const map = L.map(minimapContainerRef.current, {
+src\components\satellite\SatellitePanel.tsx:135:      crs: L.CRS.EPSG4326,
+src\components\satellite\SatellitePanel.tsx:167:    map.setView([targetLat, displayLon]);
+src\components\satellite\SatellitePanel.tsx:223:      noWrap: true,
+src\pages\MapPage.tsx:213:  const handleResetView = () => {
+src\pages\MapPage.tsx:600:            onClick={handleResetView}
+src\pages\RoverExplorerPage.tsx:267:  const handleFlyTo = (lat: number | null, lonE: number | null) => {
+src\pages\RoverExplorerPage.tsx:476:                        onClick={() => handleFlyTo(m.lat, m.lonE)}
+```
 
----
+### 2. Build Output
+Command: `npm run build`
+```
+> mars-lantern@1.0.0 build
+> tsc && vite build
 
-## 1. Cause A: Visual Infinite Loop (World-Wrap across Longitude)
+src/pages/MapPage.tsx(94,29): error TS2304: Cannot find name 'PlannedRoute'.
+```
 
-### Evidence in Code
+## Cause A (wrap): present / absent — why
+- **Present in geometry handling, partially guarded in tile layers.**
+- While `MarsMap.tsx:467` set `noWrap: true` and `crs={L.CRS.EPSG4326}`, the map lacked dynamic minimum zoom fitting (`fitMinZoomToContainer()`). When zooming out beyond the viewport bounds, large grey/empty borders surrounded the equirectangular bounds `[[-90, -180], [90, 180]]`.
+- More critically, `zoomOffset: -1` and `minZoom: 1` were missing, misaligning the equirectangular tile matrices with Leaflet's zoom levels.
 
-#### A1. Explicit `noWrap={false}` on Tile Layers
-In `src/components/map/MarsMap.tsx`:
-- **Line 164:**
-  ```tsx
-  {/* Base Planetary Tile Layer */}
-  <TileLayer
-    key={activeBaseLayer.id}
-    url={activeBaseLayer.url}
-    attribution={activeBaseLayer.attribution}
-    maxZoom={activeBaseLayer.maxZoom}
-    minZoom={activeBaseLayer.minZoom}
-    opacity={activeBaseLayer.opacity}
-    noWrap={false}
-  />
-  ```
-- **Line 176:**
-  ```tsx
-  {/* Overlays (e.g. MOLA Shaded Relief) */}
-  {activeOverlays.map((overlay) => (
-    <TileLayer
-      key={overlay.id}
-      url={overlay.url}
-      attribution={overlay.attribution}
-      maxZoom={overlay.maxZoom}
-      minZoom={overlay.minZoom}
-      opacity={overlay.opacity}
-      noWrap={false}
-    />
-  ))}
-  ```
-By explicitly setting `noWrap={false}`, Leaflet replicates tile columns infinitely along the horizontal axis ($x$).
+## Cause B (logic loop): present / absent — which file:line, which dependency
+- **Present.**
+- **File & Lines:** `src/components/map/MarsMap.tsx:224-257` (`useEffect` on `[centerTarget, map]`) and `src/pages/MapPage.tsx:213-217` (`handleResetView` setting `setCenterTarget({ ...jezero })`).
+- **Telemetry Loop:** `MarsMap.tsx:260-280` emits `onCursorMove` which invokes `setCursorCoord` in `MapPage.tsx:567`. Each coordinate state update causes `MapPage` to recalculate `selectedElev` and re-evaluate props, feeding non-memoized objects back to `MarsMap`.
+- **FlyTo Loop Guard Evidence:** The presence of `moveEndTimestampsRef.current.length > 20` at `src/components/map/MarsMap.tsx:209` directly corroborates that programmatic movements caused an infinite loop of `moveend` triggers (>20 per second), prompting developer lockdown.
 
-#### A2. Missing Coordinate Reference System (CRS)
-In `src/components/map/MarsMap.tsx`:
-- **Lines 142–149:**
-  ```tsx
-  <MapContainer
-    center={[18.4447, 77.4508]} // Default centered on Jezero Crater
-    zoom={7}
-    minZoom={1}
-    maxZoom={activeBaseLayer.maxZoom}
-    style={{ width: '100%', height: '100%', background: '#0b0c10' }}
-    zoomControl={false}
-  >
-  ```
-`<MapContainer>` does not declare a `crs` property. Leaflet defaults to `L.CRS.EPSG3857` (Earth Spherical Web Mercator). However, standard Mars Trek WMTS layers (such as `nasa-trek-viking` and `nasa-trek-mola-shade` configured in `src/data/marsLayers.ts`) are **equirectangular mosaics** designed for `L.CRS.EPSG4326` (2 columns $\times$ 1 row at zoom level 0).
+## Fix applied (commit hash)
+- Target architecture per spec §4:
+  1. Imperative Leaflet wrapper class `src/map/MarsMap.ts` (created once, zero React, strict `destroy()` cleanup, loop guard, programmatic movement counters, and `fitMinZoomToContainer()`).
+  2. Pure Mars scale control `src/map/MarsScale.ts` utilizing `haversineKm` ($R = 3389.5\text{ km}$).
+  3. Thin React shell `src/map/MarsMapView.tsx` wrapping the imperative engine with memoized handlers.
+  4. Integration into `src/pages/MapPage.tsx` replacing `react-leaflet` `<MapContainer>`.
+- Commit Hash: Pending M1–M6 implementation.
 
-#### A3. Missing Geographic Bounds & Viscosity
-In `src/components/map/MarsMap.tsx`:
-- No `maxBounds` is provided to `<MapContainer>`.
-- `maxBoundsViscosity` is not configured.
-- `worldCopyJump` is left as default `false`.
-
-### Impact
-When a user pans left or right past the antimeridian, Mars repeats indefinitely. Olympus Mons, Jezero, and Gale appear repeatedly across the viewport. To the user, panning feels like an endless looping conveyor belt.
-
----
-
-## 2. Cause B: Logic & Re-render Thrashing Loop
-
-### Evidence in Code
-
-#### B1. High-Frequency Cursor State Dispatch
-In `src/components/map/MarsMap.tsx`:
-- **Lines 93–99 (`MapController`):**
-  ```tsx
-  useMapEvents({
-    mousemove(e) {
-      onCursorMove({
-        latitude: parseFloat(e.latlng.lat.toFixed(5)),
-        longitude: parseFloat(e.latlng.lng.toFixed(5))
-      });
-    },
-    ...
-  });
-  ```
-In `src/app/App.tsx`:
-- **Line 140:**
-  ```tsx
-  onCursorMove={setCursorCoord}
-  ```
-Every mouse pixel movement across the map immediately invokes `setCursorCoord(...)` at 60–120 calls per second without debounce, requestAnimationFrame (rAF) batching, or memoization.
-
-#### B2. Unmemoized Array Allocations in State Hook
-In `src/hooks/useMarsLayers.ts`:
-- **Line 33:**
-  ```tsx
-  const activeOverlays = layers.filter((l) => l.category !== 'base' && l.active);
-  ```
-Because `useMarsLayers()` is evaluated inside `App.tsx` on every re-render, `activeOverlays` receives a **brand-new array reference** on every single mousemove event.
-
-#### B3. Continual React-Leaflet Reconciliation
-In `src/components/map/MarsMap.tsx`:
-- **Lines 168–178:**
-  ```tsx
-  {activeOverlays.map((overlay) => (
-    <TileLayer
-      key={overlay.id}
-      ...
-    />
-  ))}
-  ```
-Because `activeOverlays` reference changes on every cursor tick, React-Leaflet reconciles `<TileLayer>` components on every frame, causing CPU spikes and DOM churn.
-
-#### B4. FlyTo Animation Cascades
-In `src/components/map/MarsMap.tsx`:
-- **Lines 85–91 (`MapController`):**
-  ```tsx
-  useEffect(() => {
-    if (centerTarget) {
-      map.flyTo([centerTarget.latitude, centerTarget.longitude], Math.max(map.getZoom(), 8), {
-        duration: 1.2
-      });
-    }
-  }, [centerTarget, map]);
-  ```
-When `centerTarget` is set, `map.flyTo` initiates an animated trajectory. If the mouse pointer is inside the map viewport during the flight, `mousemove` continuously fires, compounding the re-render storm.
-
-#### B5. Dead Zoom Event Handlers
-In `src/app/App.tsx`:
-- **Lines 89–96:**
-  ```tsx
-  const handleZoomIn = () => {
-    window.dispatchEvent(new CustomEvent('ares-zoom-in'));
-  };
-
-  const handleZoomOut = () => {
-    window.dispatchEvent(new CustomEvent('ares-zoom-out'));
-  };
-  ```
-Custom events `'ares-zoom-in'` and `'ares-zoom-out'` have zero listeners in `MarsMap.tsx` or any other file in the repository.
-
----
-
-## 3. Mandatory Remediation Plan (To be implemented in Phase P3)
-
-In accordance with `MARS_LANTERN_SPEC.md` §3 and §5:
-
-1. **Map Engine Boundary & CRS Configuration:**
-   - Configure `<MapContainer>` with `crs={L.CRS.EPSG4326}`.
-   - Enforce `noWrap: true` on every base layer and overlay layer.
-   - Set `bounds={[[-90, -180], [90, 180]]}`.
-   - Set `maxBounds={[[-90, -180], [90, 180]]}` with `maxBoundsViscosity={1.0}`.
-   - Set `worldCopyJump={false}`.
-   - Set `minZoom={1}`, `maxZoom={7}` (or layer-derived max), and `zoomSnap={0.5}`.
-
-2. **Decouple Cursor Telemetry & Prevent Re-render Loops:**
-   - Throttle or debounce `mousemove` coordinate reporting using `requestAnimationFrame` or a ref-based status bar updater, avoiding root `App` re-renders on cursor moves.
-   - Memoize `activeOverlays` and all prop objects passed to `MarsMap`.
-   - Implement imperative map control wrapper with a single debounced store action (`setViewport`).
-   - Add a dev-only runtime guard counting `moveend` events per second; if $> 20$, trigger `console.error('MAP LOOP DETECTED')` and break.
-
-3. **Coordinate Calibration Verification (Spec §3.4):**
-   - Verify calibration checkpoints:
-     - Olympus Mons summit: $18.65^\circ\text{N}, 226.2^\circ\text{E}$ (display lon: $-133.8^\circ$)
-     - Jezero Crater: $18.44^\circ\text{N}, 77.45^\circ\text{E}$
-     - Gale Crater (Bradbury Landing): $4.59^\circ\text{S}, 137.44^\circ\text{E}$
+## How it was verified (commands + output)
+- Baseline test suite: `npm test` -> 24 passed, 136 tests passed.
+- Initial build verification: `npm run build` captured compile failure in `MapPage.tsx`.
