@@ -47,6 +47,9 @@ import type { MarsCoordinate, PlannedRoute } from '../types/route';
 
 type MapMode = 'Terrain' | 'Elevation' | 'Hazard';
 
+const GALE_TREK_BYPASS_URL =
+  'https://trek.nasa.gov/mars/#v=0.1&x=137.18169410377863&y=-6.543469565266718&z=9&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=&locale=&b=mars&e=136.30278787017335%2C-6.9808627455843375%2C138.0606003373839%2C-6.106076384949098&sfz=&w=';
+
 export const MapPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -512,6 +515,51 @@ export const MapPage: React.FC = () => {
             />
           </div>
 
+          {/* Quick Focus Operational Terrains */}
+          <div>
+            <span className="text-[11px] font-mono uppercase text-[#A0A0A0] block mb-1.5 font-semibold">
+              OPERATIONAL TERRAINS
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBaseLayerId('gale-crater-offline');
+                  mapRef.current?.flyTo(-6.5435, 137.1817, 8);
+                  const gale = checkpoints.find((c) => c.id.includes('gale') || c.id.includes('curiosity'));
+                  if (gale) setSelectedCheckpoint(gale);
+                }}
+                className="p-2.5 rounded-xl bg-[#15181D] hover:bg-[#1C2027] border border-[rgba(231,225,216,0.12)] hover:border-[#F08A50]/50 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-[11px] font-display font-bold text-[#E7E1D8] group-hover:text-[#F08A50] truncate">
+                  Gale Crater
+                </div>
+                <div className="text-[9px] font-mono text-[#56D9E8] flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></span>
+                  <span>Offline Ready</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBaseLayerId('viking-color');
+                  mapRef.current?.flyTo(18.4447, 77.4508, 7);
+                  const jezero = checkpoints.find((c) => c.id.includes('jezero'));
+                  if (jezero) setSelectedCheckpoint(jezero);
+                }}
+                className="p-2.5 rounded-xl bg-[#15181D] hover:bg-[#1C2027] border border-[rgba(231,225,216,0.12)] hover:border-[#56D9E8]/50 text-left transition-all cursor-pointer group"
+              >
+                <div className="text-[11px] font-display font-bold text-[#E7E1D8] group-hover:text-[#56D9E8] truncate">
+                  Jezero Crater
+                </div>
+                <div className="text-[9px] font-mono text-[#56D9E8] flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4ADE80]"></span>
+                  <span>Offline Ready</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Search Field */}
           <div className="relative">
             <span className="text-[11px] font-mono uppercase text-[#A0A0A0] block mb-1.5 font-semibold">
@@ -748,12 +796,48 @@ export const MapPage: React.FC = () => {
 
       {/* Centre: Bounded Mars Map Canvas */}
       <main className="flex-1 relative w-full h-full overflow-hidden">
-        {/* Degraded Basemap Warning Banner (§4.4, §6) */}
+        {/* Degraded Basemap Warning Banner (§4.4, §6) with Offline & Trek Bypass Actions */}
         {isDegraded && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-xl bg-amber-950/90 border border-amber-500/40 text-amber-200 text-xs font-mono shadow-2xl flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Cached basemap active — detailed tiles unavailable</span>
-            <ProvenanceBadge type="NASA-DERIVED" />
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2.5 rounded-xl bg-[#101114]/95 border border-[#F38BA8] text-[#E7E1D8] text-xs font-mono shadow-2xl flex flex-wrap items-center gap-3 backdrop-blur-md max-w-[95vw]">
+            <div className="flex items-center gap-2 text-[#F38BA8]">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-[#F38BA8]" />
+              <span className="font-semibold">Cached basemap active — detailed tiles unavailable</span>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveBaseLayerId('gale-crater-offline');
+                  mapRef.current?.flyTo(-6.5435, 137.1817, 8);
+                }}
+                className="px-2.5 py-1 rounded bg-[#56D9E8]/20 hover:bg-[#56D9E8]/30 border border-[#56D9E8]/50 text-[#56D9E8] font-medium transition-colors cursor-pointer"
+                title="Switch to local offline detailed tiles for Gale Crater"
+              >
+                Focus Gale Offline Basemap
+              </button>
+              <a
+                href={GALE_TREK_BYPASS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 rounded bg-[#F08A50]/20 hover:bg-[#F08A50]/30 border border-[#F08A50]/60 text-[#F08A50] font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Bypass internal map and view fixed NASA Mars Trek portal"
+              >
+                <span>Bypass to Mars Trek</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  mapRef.current?.retryTiles();
+                  setIsDegraded(false);
+                }}
+                className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 text-[#E7E1D8] transition-colors cursor-pointer"
+                title="Clear errors and retry loading live NASA tiles"
+              >
+                Retry Live Tiles
+              </button>
+              <ProvenanceBadge type="NASA-DERIVED" />
+            </div>
           </div>
         )}
 
@@ -840,6 +924,16 @@ export const MapPage: React.FC = () => {
           >
             <ExternalLink className="w-5 h-5" />
           </button>
+          <a
+            href={GALE_TREK_BYPASS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-3 rounded-xl bg-[#101114]/85 backdrop-blur-md border border-[#F08A50]/50 text-[#F08A50] hover:bg-[#F08A50]/20 shadow-xl transition-all cursor-pointer flex items-center justify-center"
+            title="Bypass map to fixed NASA Mars Trek Gale Crater view"
+            aria-label="Bypass map to fixed NASA Mars Trek Gale Crater view"
+          >
+            <span className="text-[10px] font-mono font-bold uppercase">TREK</span>
+          </a>
         </div>
 
         {/* Bottom-Right Mini Card: Rover Tracks */}

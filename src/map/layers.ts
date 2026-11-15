@@ -27,6 +27,15 @@ export const FALLBACK_TREK_LAYERS: TrekLayerDef[] = [
     maxMatrix: 7,
     ext: 'jpg',
     attribution: 'NASA/JPL/USGS · Mars Trek'
+  },
+  {
+    id: 'gale-crater-offline',
+    title: 'Gale Crater Detailed (Offline Cache)',
+    kind: 'satellite',
+    urlTemplate: '/tiles/offline/viking/{z}/{y}/{x}.jpg',
+    maxMatrix: 7,
+    ext: 'jpg',
+    attribution: 'NASA/JPL/USGS · Mars Trek (Local Cache)'
   }
 ];
 

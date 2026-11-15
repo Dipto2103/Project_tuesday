@@ -147,6 +147,11 @@ export class MarsMap {
       this.map.removeLayer(this.base);
     }
 
+    const localPrefix =
+      def.id === 'mola-shaded-relief'
+        ? `${import.meta.env.BASE_URL}tiles/offline/mola`
+        : `${import.meta.env.BASE_URL}tiles/offline/viking`;
+
     this.base = L.tileLayer(def.urlTemplate, {
       tileSize: 256,
       noWrap: true,
@@ -161,7 +166,19 @@ export class MarsMap {
       keepBuffer: 2
     }).addTo(this.map);
 
-    this.base.on('tileerror', this.handleTileError);
+    this.base.on('tileerror', (e: any) => {
+      const tile = e?.tile as HTMLElement | undefined;
+      const coords = e?.coords;
+      // If we haven't attempted the offline local tile yet and this isn't already a local tile:
+      if (tile && coords && !tile.getAttribute('data-tried-offline') && !def.urlTemplate.startsWith('/tiles/')) {
+        tile.setAttribute('data-tried-offline', '1');
+        const z = coords.z - 1; // zoomOffset: -1
+        (tile as HTMLImageElement).src = `${localPrefix}/${z}/${coords.y}/${coords.x}.jpg`;
+        return;
+      }
+      this.handleTileError();
+    });
+
     this.base.on('tileload', () => {
       if (this.tileErrors.length) this.tileErrors.length = 0;
     });
@@ -374,7 +391,7 @@ export class MarsMap {
     this.tileErrors = this.tileErrors.filter((t) => now - t < 10_000);
     this.tileErrors.push(now);
 
-    if (this.tileErrors.length >= 5 && !this.fallback && this.o.fallbackImageUrl) {
+    if (this.tileErrors.length >= 15 && !this.fallback && this.o.fallbackImageUrl) {
       this.fallback = L.imageOverlay(this.o.fallbackImageUrl, MARS_WORLD_BOUNDS, {
         opacity: 1,
         interactive: false
@@ -383,4 +400,20 @@ export class MarsMap {
       this.o.onBackendDegraded?.(true);
     }
   };
+
+  retryTiles() {
+    this.tileErrors = [];
+    if (this.fallback) {
+      this.map.removeLayer(this.fallback);
+      this.fallback = undefined;
+    }
+    this.o.onBackendDegraded?.(false);
+    if (this.base) {
+      this.base.redraw();
+    }
+  }
+
+  focusGaleCrater() {
+    this.flyTo(-6.5435, 137.1817, 8);
+  }
 }

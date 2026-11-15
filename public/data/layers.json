@@ -46,6 +46,29 @@
       "verifiedOn": "2026-11-15",
       "active": false,
       "opacity": 1
+    },
+    {
+      "id": "gale-crater-offline",
+      "title": "Gale Crater Detailed (Offline Cache)",
+      "kind": "satellite",
+      "urlTemplate": "/tiles/offline/viking/{z}/{y}/{x}.jpg",
+      "tileSize": 256,
+      "minZoom": 1,
+      "maxNativeZoom": 8,
+      "maxMatrix": 7,
+      "ext": "jpg",
+      "bbox": [
+        136.0,
+        -7.5,
+        138.5,
+        -4.5
+      ],
+      "projection": "equirectangular",
+      "attribution": "NASA/JPL/USGS · Mars Trek (Local Cache)",
+      "provenance": "NASA-DERIVED",
+      "verifiedOn": "2026-11-15",
+      "active": false,
+      "opacity": 1
     }
   ]
 }

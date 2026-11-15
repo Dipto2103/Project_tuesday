@@ -303,6 +303,21 @@
   - Added unit and geodetic calibration acceptance tests matching §10 manual calibration table.
   - Test suite passes 100% (25 test files, 148 tests passing). Production build succeeds with 0 errors.
 
+## Offline Detailed Basemap & NASA Mars Trek Bypass — 2026-11-15
+- **Local Offline Tile Cache (`public/tiles/offline/`):**
+  - Downloaded full resolution tile pyramids (Matrix 0 through 7) for Gale Crater (Curiosity traverse / Mount Sharp: lat -4.5 to -7.5, lon 136.0 to 138.5) and Jezero Crater (Perseverance: lat 17.5 to 19.5, lon 76.0 to 79.0) for both Viking Color Mosaic and MOLA Shaded Relief.
+  - Downloaded global base tiles (Matrix 0 and 1) for both layers (84 tiles total, 4.3 MB).
+- **Graceful Tile Fallback in `MarsMap.ts`:**
+  - Implemented automatic local tile fallback in `MarsMap.setBaseLayer`: when a live NASA Trek tile request fails or times out, Leaflet automatically loads the offline local tile from `/tiles/offline/{layer}/{z}/{y}/{x}.jpg` without counting as a failure.
+  - Increased failure trip threshold to 15 errors in 10 seconds to prevent slow networks from prematurely triggering degraded global overlay.
+  - Added `retryTiles()` and `focusGaleCrater()` imperative methods on `MarsMap`.
+- **NASA Mars Trek Bypass & Offline Actions (`src/pages/MapPage.tsx`):**
+  - Upgraded degraded warning banner with interactive actions: "Focus Gale Offline Basemap", direct "Bypass to Mars Trek" external link to NASA's Gale Crater portal view (`&x=137.18169&y=-6.54347&z=9`), and "Retry Live Tiles".
+  - Added "Trek Gale" direct bypass button in the top-right map controls.
+  - Added "OPERATIONAL TERRAINS" quick-jump card in the left navigation panel for Gale Crater and Jezero Crater with "Offline Ready" indicators.
+  - Added `gale-crater-offline` layer to `public/data/layers.json` and `src/map/layers.ts`.
+
+
 
 
 
